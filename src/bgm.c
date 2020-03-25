@@ -40,9 +40,9 @@ SceUID _bgm_decode_thread;
 SceUID _bgm_play_thread;
 SceUID _bgm_analyse_thread;
 
-volatile SceInt32 pcm_decoder_frame_counter;
-volatile SceInt32 pcm_analysis_frame_counter;
-volatile SceInt32 pcm_playback_frame_counter;
+volatile SceUInt32 pcm_decoder_frame_counter;
+volatile SceUInt32 pcm_analysis_frame_counter;
+volatile SceUInt32 pcm_playback_frame_counter;
 
 SceInt16 * _pcm_buffer;
 SceUInt8 * _mp3_buffer;
@@ -110,6 +110,7 @@ void bgm_init () {
 	psvDebugScreenPuts("Failed to allocate pcm buffer\n");
 	while (1);
     }
+    bzero(_pcm_buffer, PCM_FRAME_SIZE * PCM_FRAMES);
 
     /* and the mp3 buffer. Enough for the biggest frame possible */
     _mp3_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, MP3_FRAME_SIZE);
@@ -117,6 +118,7 @@ void bgm_init () {
 	psvDebugScreenPuts("Failed to allocate mp3 buffer\n");
 	while (1);
     }
+    bzero(_mp3_buffer, MP3_FRAME_SIZE);
   
     /* Create event flag */
     res = sceKernelCreateEventFlag("_decode_event_flag", SCE_KERNEL_EVF_ATTR_MULTI, 0, NULL);
@@ -233,7 +235,6 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 
 	    /* seek to the start */
 	    foffset = sceIoLseek(fdesc, 0, SCE_SEEK_SET);
-	    bzero (_mp3_buffer, MP3_FRAME_SIZE);
 
 	    while (foffset < flen) {
 
@@ -303,7 +304,7 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 
 		    /* fix up the offset */
 		    foffset += ctrl.inputEsSize;	    
-		    sceIoLseek(fdesc, foffset, SCE_SEEK_SET);
+		    sceIoLseek(fdesc, ctrl.inputEsSize - MP3_FRAME_SIZE, SCE_SEEK_CUR);
 
 		    /* and the frame count / pcm buffer pointer */
 		    pcm_decoder_frame_counter++;

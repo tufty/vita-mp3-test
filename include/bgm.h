@@ -24,9 +24,9 @@ extern SceUID bgm_event_flag;
 #define SCE_KERNEL_THREAD_STACK_SIZE_MAX 0x2000000
 
 /* Pointers into the PCM data block */ 
-volatile extern SceInt32 pcm_decoder_frame_counter;
-volatile extern SceInt32 pcm_playback_frame_counter;
-volatile extern SceInt32 pcm_analysis_frame_counter;
+volatile extern SceUInt32 pcm_decoder_frame_counter;
+volatile extern SceUInt32 pcm_playback_frame_counter;
+volatile extern SceUInt32 pcm_analysis_frame_counter;
 
 void bgm_init ();
 void bgm_start ();
