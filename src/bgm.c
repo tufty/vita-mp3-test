@@ -105,14 +105,6 @@ void bgm_init () {
     _debug_mutex = sceKernelCreateMutex("_debug_mutex", 0, 0, NULL);
   
     int res = SCE_OK;
-    /* Create the PCM buffer, easy enough, space for N frames */
-    _pcm_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE * PCM_FRAMES);
-    if (NULL == _pcm_buffer) {
-	psvDebugScreenPuts("Failed to allocate pcm buffer\n");
-	while (1);
-    }
-    bzero(_pcm_buffer, PCM_FRAME_SIZE * PCM_FRAMES);
-
     /* and the mp3 buffer. Enough for the biggest frame possible */
     _mp3_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, MP3_FRAME_SIZE);
     if (NULL == _mp3_buffer) {
@@ -121,6 +113,14 @@ void bgm_init () {
     }
     bzero(_mp3_buffer, MP3_FRAME_SIZE);
   
+    /* Create the PCM buffer, easy enough, space for N frames */
+    _pcm_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE * PCM_FRAMES);
+    if (NULL == _pcm_buffer) {
+	psvDebugScreenPuts("Failed to allocate pcm buffer\n");
+	while (1);
+    }
+    bzero(_pcm_buffer, PCM_FRAME_SIZE * PCM_FRAMES);
+
     /* Create event flag */
     res = sceKernelCreateEventFlag("_decode_event_flag", SCE_KERNEL_EVF_ATTR_MULTI, 0, NULL);
     if (0 > res) {
