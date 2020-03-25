@@ -15,6 +15,7 @@
 
 #define PCM_CHANNELS 2
 #define PCM_FRAMES 1024
+#define PCM_FRAMES_BLOCK (PCM_FRAMES / 16)
 #define PCM_FRAME_SIZE (SCE_AUDIODEC_ROUND_UP(sizeof(SceInt16) * PCM_CHANNELS * SCE_AUDIODEC_MP3_MAX_SAMPLES))
 
 #define MP3_FRAME_HEADER_SIZE 4
@@ -226,6 +227,7 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 	} else {
 	    /* find its length */
 	    flen = sceIoLseek(fdesc, 0, SCE_SEEK_END) ;
+	    foffset = 0;
 
 	    /* quick sanity check */
 	    if (MP3_FRAME_HEADER_SIZE >= flen) {
@@ -233,13 +235,10 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 		while (1);    
 	    }
 
-	    /* seek to the start */
-	    foffset = sceIoLseek(fdesc, 0, SCE_SEEK_SET);
-
 	    while (foffset < flen) {
 
 		/* Read in the maximum frame size, we'll roll back from this to the actual end of frame later */
-		sceIoRead(fdesc, _mp3_buffer, MP3_FRAME_SIZE);
+		sceIoPread(fdesc, _mp3_buffer, MP3_FRAME_SIZE, foffset);
 	
 		/* deal with IDv3 tags */
 		if ((0x49 == _mp3_buffer[0]) &&
@@ -304,13 +303,12 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 
 		    /* fix up the offset */
 		    foffset += ctrl.inputEsSize;	    
-		    sceIoLseek(fdesc, ctrl.inputEsSize - MP3_FRAME_SIZE, SCE_SEEK_CUR);
 
 		    /* and the frame count / pcm buffer pointer */
 		    pcm_decoder_frame_counter++;
 	    	    
-		    sceKernelSetEventFlag(_playback_event_flag, EVF_FRAME_DECODED);
-		    sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_DECODED);
+		    /* sceKernelSetEventFlag(_playback_event_flag, EVF_FRAME_DECODED); */
+		    /* sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_DECODED); */
 
 		    /* if we are stalled waiting for analysis or playback, wait */
 		    while ((pcm_decoder_frame_counter % PCM_FRAMES) == (pcm_playback_frame_counter % PCM_FRAMES)) {
@@ -325,8 +323,14 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 		    sceKernelLockMutex(_debug_mutex, 1, NULL);
 		    int x = 0, y =200;
 		    psvDebugScreenSetCoordsXY(&x, &y);
-		    psvDebugScreenPrintf("Bad frame %u at offset %#08x", pcm_decoder_frame_counter + 1, foffset);
+		    psvDebugScreenPrintf("Bad frame %u at offset %#08x flen %#08x", pcm_decoder_frame_counter, foffset, flen);
+		    y = 300;
+		    psvDebugScreenSetCoordsXY(&x, &y);
+		    psvDebugScreenPrintf("%02x%02x%02x%02x %02x%02x%02x%02x ", _mp3_buffer[0],_mp3_buffer[1],_mp3_buffer[2],_mp3_buffer[3], _mp3_buffer[4],_mp3_buffer[5],_mp3_buffer[6],_mp3_buffer[7]);
+		    
 		    sceKernelUnlockMutex(_debug_mutex, 1);
+
+		    while(1);
 		}
 		/* Dump out some debug info */
 		debug_decoder();
@@ -341,7 +345,8 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 }
 
 void play_available_frames(SceUID port) {
-    while ((pcm_playback_frame_counter < pcm_decoder_frame_counter) && (pcm_playback_frame_counter < 1024)) {
+    /* Play frames until we hit the encoder pointer, then stall */
+    while (pcm_playback_frame_counter < pcm_decoder_frame_counter) {
 	int ret = sceAudioOutOutput(port, pcm_pointer(pcm_playback_frame_counter));
 	if (0 > ret) {
 	    sceKernelLockMutex(_debug_mutex, 1, NULL);
@@ -352,8 +357,13 @@ void play_available_frames(SceUID port) {
 	}
 
 	pcm_playback_frame_counter++;
-    
-	sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_PLAYED);
+
+	/* After PCM_FRAMES_BLOCK frames played, let the decoder carry on if it needs to*/
+	if (0 == (pcm_playback_frame_counter % PCM_FRAMES_BLOCK)) {
+	    sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_PLAYED);
+	} else {
+	    sceKernelClearEventFlag(_decode_event_flag, EVF_FRAME_PLAYED);
+	}
         
 	debug_playback(port);
     }
