@@ -7,6 +7,7 @@
 #include <psp2/audiodec.h>
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <malloc.h>
 
@@ -49,7 +50,7 @@ SceInt16 * _pcm_buffer;
 SceUInt8 * _mp3_buffer;
 
 SceInt16 * pcm_pointer (SceUInt32 count) {
-    return _pcm_buffer + (PCM_FRAME_SIZE * (count % PCM_FRAMES));
+    return _pcm_buffer + ((PCM_FRAME_SIZE / sizeof(SceInt16)) * (count % PCM_FRAMES));
 }
 
 // debug stuff
@@ -84,13 +85,17 @@ void debug_playback (int port) {
     sceKernelUnlockMutex(_debug_mutex, 1);
 }
 
-void debug_analysis () {
+void debug_analysis (SceUInt16 * analysis) {
     sceKernelLockMutex(_debug_mutex, 1, NULL);
-    int x = 640, y1 = 51, y2 = 68;
+    int x = 640, y1 = 51, y2 = 68, x2 = 0, y3 = 320;
     psvDebugScreenSetCoordsXY(&x, &y1);
     print_frame_count(pcm_analysis_frame_counter);
     psvDebugScreenSetCoordsXY(&x, &y2);
     print_frame_addr(pcm_pointer(pcm_analysis_frame_counter));
+
+    psvDebugScreenSetCoordsXY(&x2, &y3);
+    psvDebugScreenPrintf("%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u", analysis[0], analysis[1], analysis[2], analysis[3], analysis[4], analysis[5], analysis[6], analysis[7], analysis[8]);
+    
     sceKernelUnlockMutex(_debug_mutex, 1);
 }
 
@@ -308,7 +313,7 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 		    pcm_decoder_frame_counter++;
 	    	    
 		    /* sceKernelSetEventFlag(_playback_event_flag, EVF_FRAME_DECODED); */
-		    /* sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_DECODED); */
+		    sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_DECODED);
 
 		    /* if we are stalled waiting for analysis or playback, wait */
 		    while ((pcm_decoder_frame_counter % PCM_FRAMES) == (pcm_playback_frame_counter % PCM_FRAMES)) {
@@ -414,11 +419,45 @@ int bgm_play_thread_worker (SceSize args, void * arg) {
     return 0;
 }
 
+
+/* Decimate count entries from *in to *out by averaging */
+SceUInt16 decimate(SceInt16 * in, SceInt16 * out, SceUInt32 count) {
+    SceInt32 v = 0;
+    for (int i = 0; i < count; i++) {
+	v += out[i] = (out[i] + (abs(in[(i << 1)] + in[(i << 1) + 1]) >> 1)) >> 1;
+    }
+    return v / count;
+}
+
 int bgm_analyse_thread_worker (SceSize args, void * arg) {
-    sceKernelWaitEventFlag(_analysis_event_flag, EVF_START_ANALYSE, SCE_EVENT_WAITAND, NULL, NULL);
-  
-    while (1);
-  
+    /* Analysis data is the same size as one PCM frame */
+    SceInt16 * _analysis_frame_data = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE);
+    SceUInt16 _analysis[9] = {0};
+    
+    sceKernelWaitEventFlag(_analysis_event_flag, EVF_START_ANALYSE, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
+    
+    while (1) {
+	SceUInt32 count = SCE_AUDIODEC_MP3_MAX_SAMPLES;
+	SceInt16 * in = pcm_pointer(pcm_analysis_frame_counter);
+	SceInt16 * out = _analysis_frame_data;
+	int i = 0;
+
+	sceKernelWaitEventFlag(_analysis_event_flag, EVF_FRAME_DECODED, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
+	
+	while (0 == (count & 1)) {
+	    _analysis[i++] = decimate(in, out, count);
+	    in = out;
+	    out += count;
+	    count >>= 1;
+	}
+
+	pcm_analysis_frame_counter ++;
+
+	if (0 == (pcm_analysis_frame_counter & PCM_FRAMES_BLOCK)) {
+	    sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_ANALYSED);
+	}
+	debug_analysis(_analysis);
+    }
     return 0;
 }
 
