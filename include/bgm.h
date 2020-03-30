@@ -28,6 +28,17 @@ volatile extern SceUInt32 pcm_decoder_frame_counter;
 volatile extern SceUInt32 pcm_playback_frame_counter;
 volatile extern SceUInt32 pcm_analysis_frame_counter;
 
+
+#define max(a,b)	       \
+  ({ __typeof__ (a) _a = (a);	\
+    __typeof__ (b) _b = (b);	\
+    _a > _b ? _a : _b; })
+
+#define min(a,b)	       \
+  ({ __typeof__ (a) _a = (a);	\
+    __typeof__ (b) _b = (b);	\
+    _a < _b ? _a : _b; })
+
 void bgm_init ();
 void bgm_start ();
 

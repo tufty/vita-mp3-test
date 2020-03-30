@@ -1,5 +1,6 @@
 #include "bgm.h"
 #include "debugScreen.h"
+#include "fft.h"
 
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/io/fcntl.h>
@@ -10,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <malloc.h>
+#include <math.h>
 
 #define SCE_OK 0
 #define SCE_KERNEL_EVF_ATTR_MULTI 0x00001000U
@@ -29,6 +31,8 @@
 #define MP3_FRAME_SIZE (SCE_AUDIODEC_ROUND_UP(MP3_FRAME_HEADER_SIZE + MP3_ES_SIZE))
 
 #define ID3V2_HEADER_SIZE (10 - MP3_FRAME_HEADER_SIZE)
+
+#define FFT_BANDS 8
 
 #define bgm_file_name "ux0:/data/test.mp3"
 
@@ -85,16 +89,25 @@ void debug_playback (int port) {
     sceKernelUnlockMutex(_debug_mutex, 1);
 }
 
-void debug_analysis (SceUInt16 * analysis) {
+void debug_analysis (SceInt32 * data) {
     sceKernelLockMutex(_debug_mutex, 1, NULL);
-    int x = 640, y1 = 51, y2 = 68, x2 = 0, y3 = 320;
+    int x = 640, y1 = 51, y2 = 68;
     psvDebugScreenSetCoordsXY(&x, &y1);
     print_frame_count(pcm_analysis_frame_counter);
     psvDebugScreenSetCoordsXY(&x, &y2);
     print_frame_addr(pcm_pointer(pcm_analysis_frame_counter));
 
-    psvDebugScreenSetCoordsXY(&x2, &y3);
-    psvDebugScreenPrintf("%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u", analysis[0], analysis[1], analysis[2], analysis[3], analysis[4], analysis[5], analysis[6], analysis[7], analysis[8]);
+    int y = 320;
+    for (int i = 0; i < FFT_BANDS; i++) {
+      x = 0;
+      psvDebugScreenSetCoordsXY(&x, &y);
+      psvDebugScreenPrintf("%05i                                                       ", data[i]);
+      x = 96 + (data[i] >> 3) ;
+      psvDebugScreenSetCoordsXY(&x, &y);
+      psvDebugScreenPuts("|");
+      y += 16;
+    }
+
     
     sceKernelUnlockMutex(_debug_mutex, 1);
 }
@@ -246,9 +259,9 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 		sceIoPread(fdesc, _mp3_buffer, MP3_FRAME_SIZE, foffset);
 	
 		/* deal with IDv3 tags */
-		if ((0x49 == _mp3_buffer[0]) &&
-		    (0x44 == _mp3_buffer[1]) &&
-		    (0x33 == _mp3_buffer[2]))
+		if (('I' == _mp3_buffer[0]) &&
+		    ('D' == _mp3_buffer[1]) &&
+		    ('3' == _mp3_buffer[2]))
 		{	    
 		    /* how long is the tags block? */
 		    int tags_length = ((_mp3_buffer[6] & 0x7f) << 21) +
@@ -259,6 +272,14 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 	    
 		    /* skip the tags */
 		    foffset = sceIoLseek(fdesc, tags_length, SCE_SEEK_SET);
+		}
+		/* ID3v1 tags at the end of the file */
+		else if (('T' == _mp3_buffer[0] )&&
+			 ('A' == _mp3_buffer[1] )&&
+			 ('G' ==  _mp3_buffer[2] ))
+		{
+		    /* These occur at the end of the file, we're done */
+		    foffset = flen;
 		}
 		/* is this a proper MP3 frame header */
 		else if ((0xff == _mp3_buffer[0]) &&
@@ -338,7 +359,7 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 		    while(1);
 		}
 		/* Dump out some debug info */
-		debug_decoder();
+		//		debug_decoder();
 
 	    }
 	    sceKernelSetEventFlag(_playback_event_flag, EVF_TRACK_DECODED);
@@ -352,6 +373,7 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 void play_available_frames(SceUID port) {
     /* Play frames until we hit the encoder pointer, then stall */
     while (pcm_playback_frame_counter < pcm_decoder_frame_counter) {
+	sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_PLAYED);
 	int ret = sceAudioOutOutput(port, pcm_pointer(pcm_playback_frame_counter));
 	if (0 > ret) {
 	    sceKernelLockMutex(_debug_mutex, 1, NULL);
@@ -370,7 +392,7 @@ void play_available_frames(SceUID port) {
 	    sceKernelClearEventFlag(_decode_event_flag, EVF_FRAME_PLAYED);
 	}
         
-	debug_playback(port);
+	//	debug_playback(port);
     }
     sceKernelLockMutex(_debug_mutex, 1, NULL);
     int x = 0, y = 240;
@@ -419,44 +441,52 @@ int bgm_play_thread_worker (SceSize args, void * arg) {
     return 0;
 }
 
-
-/* Decimate count entries from *in to *out by averaging */
-SceUInt16 decimate(SceInt16 * in, SceInt16 * out, SceUInt32 count) {
-    SceInt32 v = 0;
-    for (int i = 0; i < count; i++) {
-	v += out[i] = (out[i] + (abs(in[(i << 1)] + in[(i << 1) + 1]) >> 1)) >> 1;
-    }
-    return v / count;
+/* Fast integer distance calculation ripped off from Atari's vector game 'mathbox' processor */
+/* Approximates sqrt (a^2 + b^2) by max (a, b) + 3/8 min (a, b) */
+/* half-sdecent approximation, stays in integer bounds */
+SceInt16 fdist_approx (SceInt16 a, SceInt16 b) {
+    SceInt16 mn = min(a, b) >> 2;    /* 2/8 of minimum */
+    SceInt16 ret = max(a, b) + mn;   /* max + 2/8 of minimum */
+    mn >>= 1;                        /* the missing 1/8 of minimum, to get our 3/8) */
+    return ret + mn;                
 }
 
 int bgm_analyse_thread_worker (SceSize args, void * arg) {
     /* Analysis data is the same size as one PCM frame */
-    SceInt16 * _analysis_frame_data = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE);
-    SceUInt16 _analysis[9] = {0};
+    SceInt16 * _analysis_fft_data = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE);
+    SceInt32 _analysis_band_data[FFT_BANDS];
     
     sceKernelWaitEventFlag(_analysis_event_flag, EVF_START_ANALYSE, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
     
     while (1) {
-	SceUInt32 count = SCE_AUDIODEC_MP3_MAX_SAMPLES;
-	SceInt16 * in = pcm_pointer(pcm_analysis_frame_counter);
-	SceInt16 * out = _analysis_frame_data;
-	int i = 0;
-
-	sceKernelWaitEventFlag(_analysis_event_flag, EVF_FRAME_DECODED, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
+	sceKernelWaitEventFlag(_analysis_event_flag, EVF_FRAME_PLAYED, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
 	
-	while (0 == (count & 1)) {
-	    _analysis[i++] = decimate(in, out, count);
-	    in = out;
-	    out += count;
-	    count >>= 1;
+	/* Distance calc and spread to make real / imaginary */
+	SceInt16 * pcm = pcm_pointer(pcm_analysis_frame_counter);
+	SceInt16 * real = _analysis_fft_data;
+	SceInt16 * imag = _analysis_fft_data + 512;
+	for (int i = 0; i < 1024; i += 2) {
+	    real[i >> 1] = fdist_approx(abs(pcm[i]), abs(pcm[i+1]));
+	}
+	for (int i = 1; i < 1025; i += 2) {
+	    imag[i >> 1] = fdist_approx(abs(pcm[i]), abs(pcm[i+1]));
 	}
 
+	fix_fft(real, imag, 9, 0);
+
+	for (int b = 0; b < FFT_BANDS; b++) {
+	    _analysis_band_data[b] = 0;
+	    for (int i = 0; i < 512 / FFT_BANDS; i++) {
+		_analysis_band_data[b] += fdist_approx(abs(real[(b * FFT_BANDS) + i]), abs(imag[(b * FFT_BANDS) + i]));
+	    }
+	    _analysis_band_data[b] /= (256 / FFT_BANDS);
+	}
+	
 	pcm_analysis_frame_counter ++;
 
-	if (0 == (pcm_analysis_frame_counter & PCM_FRAMES_BLOCK)) {
-	    sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_ANALYSED);
-	}
-	debug_analysis(_analysis);
+	sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_ANALYSED);
+	
+	debug_analysis(_analysis_band_data);
     }
     return 0;
 }
