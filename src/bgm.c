@@ -1,11 +1,14 @@
 #include "bgm.h"
 #include "debugScreen.h"
-#include "fft.h"
+#include "kiss_fft.h"
+#include "kiss_fftr.h"
 
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/io/fcntl.h>
 #include <psp2/audioout.h>
 #include <psp2/audiodec.h>
+
+#include <vita2d.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -32,7 +35,8 @@
 
 #define ID3V2_HEADER_SIZE (10 - MP3_FRAME_HEADER_SIZE)
 
-#define FFT_BANDS 8
+#define FFT_BANDS 7
+#define FFT_HISTORY_SIZE 32
 
 #define bgm_file_name "ux0:/data/test.mp3"
 
@@ -57,71 +61,13 @@ SceInt16 * pcm_pointer (SceUInt32 count) {
     return _pcm_buffer + ((PCM_FRAME_SIZE / sizeof(SceInt16)) * (count % PCM_FRAMES));
 }
 
-// debug stuff
-SceUID _debug_mutex;
-
-void print_frame_count (SceUInt32 count) {
-    psvDebugScreenPrintf("%03u %u", count % PCM_FRAMES, count);
-}
-void print_frame_addr (void * addr) {
-    psvDebugScreenPrintf("0x%08x", addr);
-}
-
-void debug_decoder () {
-    sceKernelLockMutex(_debug_mutex, 1, NULL);
-    int x = 0, y1 = 51, y2 = 68;
-    psvDebugScreenSetCoordsXY(&x, &y1);
-    print_frame_count(pcm_decoder_frame_counter);
-    psvDebugScreenSetCoordsXY(&x, &y2);
-    print_frame_addr(pcm_pointer(pcm_decoder_frame_counter));
-    sceKernelUnlockMutex(_debug_mutex, 1);
-}
-
-void debug_playback (int port) {
-    sceKernelLockMutex(_debug_mutex, 1, NULL);
-    int x = 320, y1 = 51, y2 = 68, y3 = 81;
-    psvDebugScreenSetCoordsXY(&x, &y1);
-    print_frame_count(pcm_playback_frame_counter);
-    psvDebugScreenSetCoordsXY(&x, &y2);
-    print_frame_addr(pcm_pointer(pcm_playback_frame_counter));
-    psvDebugScreenSetCoordsXY(&x, &y3);
-    psvDebugScreenPrintf("%u remaining", sceAudioOutGetRestSample(port));
-    sceKernelUnlockMutex(_debug_mutex, 1);
-}
-
-void debug_analysis (SceInt32 * data) {
-    sceKernelLockMutex(_debug_mutex, 1, NULL);
-    int x = 640, y1 = 51, y2 = 68;
-    psvDebugScreenSetCoordsXY(&x, &y1);
-    print_frame_count(pcm_analysis_frame_counter);
-    psvDebugScreenSetCoordsXY(&x, &y2);
-    print_frame_addr(pcm_pointer(pcm_analysis_frame_counter));
-
-    int y = 320;
-    for (int i = 0; i < FFT_BANDS; i++) {
-      x = 0;
-      psvDebugScreenSetCoordsXY(&x, &y);
-      psvDebugScreenPrintf("%05i                                                       ", data[i]);
-      x = 96 + (data[i] >> 3) ;
-      psvDebugScreenSetCoordsXY(&x, &y);
-      psvDebugScreenPuts("|");
-      y += 16;
-    }
-
-    
-    sceKernelUnlockMutex(_debug_mutex, 1);
-}
-
-
 struct {
     int freq;
     int format;
 } audio;
 
 // Do all the allocations, and kick off the threads.
-void bgm_init () {
-    _debug_mutex = sceKernelCreateMutex("_debug_mutex", 0, 0, NULL);
-  
+void bgm_init () {  
     int res = SCE_OK;
     /* and the mp3 buffer. Enough for the biggest frame possible */
     _mp3_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, MP3_FRAME_SIZE);
@@ -338,29 +284,13 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 
 		    /* if we are stalled waiting for analysis or playback, wait */
 		    while ((pcm_decoder_frame_counter % PCM_FRAMES) == (pcm_playback_frame_counter % PCM_FRAMES)) {
-			sceKernelLockMutex(_debug_mutex, 1, NULL);
-			int x = 0, y =220;
-			psvDebugScreenSetCoordsXY(&x, &y);
-			psvDebugScreenPrintf("Decode stalled %u at offset %#08x", pcm_decoder_frame_counter, foffset);
-			sceKernelUnlockMutex(_debug_mutex, 1);
-			sceKernelWaitEventFlag(_decode_event_flag, EVF_FRAME_PLAYED | EVF_FRAME_ANALYSED, SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
+			sceKernelWaitEventFlag(_decode_event_flag, EVF_FRAME_PLAYED, SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
 		    }
 		} else {
-		    sceKernelLockMutex(_debug_mutex, 1, NULL);
-		    int x = 0, y =200;
-		    psvDebugScreenSetCoordsXY(&x, &y);
-		    psvDebugScreenPrintf("Bad frame %u at offset %#08x flen %#08x", pcm_decoder_frame_counter, foffset, flen);
-		    y = 300;
-		    psvDebugScreenSetCoordsXY(&x, &y);
-		    psvDebugScreenPrintf("%02x%02x%02x%02x %02x%02x%02x%02x ", _mp3_buffer[0],_mp3_buffer[1],_mp3_buffer[2],_mp3_buffer[3], _mp3_buffer[4],_mp3_buffer[5],_mp3_buffer[6],_mp3_buffer[7]);
-		    
-		    sceKernelUnlockMutex(_debug_mutex, 1);
-
-		    while(1);
+		    /* Bad frame, crash out */
+		    psvDebugScreenPrintf("Bad Frame, header %#02x %#02x %#02x %#02x at %#08x", _mp3_buffer[0], _mp3_buffer[1], _mp3_buffer[2], _mp3_buffer[3], foffset);
+		    foffset = flen;
 		}
-		/* Dump out some debug info */
-		//		debug_decoder();
-
 	    }
 	    sceKernelSetEventFlag(_playback_event_flag, EVF_TRACK_DECODED);
 	    sceKernelSetEventFlag(_analysis_event_flag, EVF_TRACK_DECODED);
@@ -376,11 +306,7 @@ void play_available_frames(SceUID port) {
 	sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_PLAYED);
 	int ret = sceAudioOutOutput(port, pcm_pointer(pcm_playback_frame_counter));
 	if (0 > ret) {
-	    sceKernelLockMutex(_debug_mutex, 1, NULL);
-	    int x = 0, y =220;
-	    psvDebugScreenSetCoordsXY(&x, &y);
 	    psvDebugScreenPrintf("Play failed frame %u error %#08x", pcm_playback_frame_counter, ret);
-	    sceKernelUnlockMutex(_debug_mutex, 1);
 	}
 
 	pcm_playback_frame_counter++;
@@ -390,16 +316,9 @@ void play_available_frames(SceUID port) {
 	    sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_PLAYED);
 	} else {
 	    sceKernelClearEventFlag(_decode_event_flag, EVF_FRAME_PLAYED);
-	}
-        
-	//	debug_playback(port);
+	}   
     }
-    sceKernelLockMutex(_debug_mutex, 1, NULL);
-    int x = 0, y = 240;
-    psvDebugScreenSetCoordsXY(&x, &y);
-    psvDebugScreenPrintf("Playback stalled %u", pcm_playback_frame_counter);
-    sceKernelUnlockMutex(_debug_mutex, 1);
-  
+    /* If we get here we've caught up with the decoder, we're done */
 }
   
 int bgm_play_thread_worker (SceSize args, void * arg) {
@@ -454,39 +373,70 @@ SceInt16 fdist_approx (SceInt16 a, SceInt16 b) {
 int bgm_analyse_thread_worker (SceSize args, void * arg) {
     /* Analysis data is the same size as one PCM frame */
     SceInt16 * _analysis_fft_data = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE);
-    SceInt32 _analysis_band_data[FFT_BANDS];
+    
+    SceInt16 _analysis_band_data[FFT_HISTORY_SIZE][FFT_BANDS] = {0};
+    SceInt16 _band_averages[FFT_BANDS] = {0};
+    SceUInt16 _bands[FFT_BANDS] = {2, 5, 5, 35, 46, 47, 372}; 
+    int fft_counter = 0;
+
+    kiss_fftr_cfg fft_cfg = kiss_fftr_alloc(1024, 0, NULL, NULL);
     
     sceKernelWaitEventFlag(_analysis_event_flag, EVF_START_ANALYSE, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
     
     while (1) {
 	sceKernelWaitEventFlag(_analysis_event_flag, EVF_FRAME_PLAYED, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
+	vita2d_start_drawing();
+	vita2d_clear_screen();	
+
 	
 	/* Distance calc and spread to make real / imaginary */
 	SceInt16 * pcm = pcm_pointer(pcm_analysis_frame_counter);
-	SceInt16 * real = _analysis_fft_data;
-	SceInt16 * imag = _analysis_fft_data + 512;
-	for (int i = 0; i < 1024; i += 2) {
-	    real[i >> 1] = fdist_approx(abs(pcm[i]), abs(pcm[i+1]));
-	}
-	for (int i = 1; i < 1025; i += 2) {
-	    imag[i >> 1] = fdist_approx(abs(pcm[i]), abs(pcm[i+1]));
+	for (int i = 0; i < 1024; i ++) {
+	  _analysis_fft_data[i] = pcm[(i << 1)]; //fdist_approx(abs(pcm[(i << 1)]), abs(pcm[(i << 1) + 1]));
 	}
 
-	fix_fft(real, imag, 9, 0);
-
+	kiss_fft_scalar * in_buf = (kiss_fft_scalar *)_analysis_fft_data;
+	kiss_fft_cpx * out_buf = (kiss_fft_cpx *)(_analysis_fft_data + 1024);
+	
+	kiss_fftr(fft_cfg, in_buf, out_buf);
+	
 	for (int b = 0; b < FFT_BANDS; b++) {
-	    _analysis_band_data[b] = 0;
-	    for (int i = 0; i < 512 / FFT_BANDS; i++) {
-		_analysis_band_data[b] += fdist_approx(abs(real[(b * FFT_BANDS) + i]), abs(imag[(b * FFT_BANDS) + i]));
+	    SceInt32 total = 0;
+	    SceInt32 variance = 0;
+	    for (int i = 0; i < _bands[b]; i++) {
+	      kiss_fft_cpx v = out_buf[(b * FFT_BANDS) + i];
+	      //	      total += fdist_approx(abs(v.r), abs(v.i));
+	      total += (v.r * v.r) + (v.i * v.i);
 	    }
-	    _analysis_band_data[b] /= (256 / FFT_BANDS);
+	    _analysis_band_data[fft_counter][b] = total / _bands[b];
+	    	    
+	    total = 0;
+	    for (int i = 0; i < FFT_HISTORY_SIZE; i++) {
+	      SceInt16 diff = _analysis_band_data[i][b] - _band_averages[b];
+	      total += _analysis_band_data[i][b];
+	      variance += diff * diff;
+	    }
+	    _band_averages[b] = total / FFT_HISTORY_SIZE;
+	    variance /= (FFT_HISTORY_SIZE - 1);
+
+	    vita2d_draw_rectangle(b * 60, 540, 59, -1 * (_band_averages[b] / 60), 0xff00ff00);  
+	    /* vita2d_draw_line(b * 60, 540 - _analysis_band_data[fft_counter][b], */
+	    /* 		     (b + 1) * 60, 540 - _analysis_band_data[fft_counter][b], 0xff000000); */
+
+	    /* Did we get a beat on this band? */
+	    if ((_band_averages[b] * 150 < _analysis_band_data[fft_counter][b]) &&
+		(variance > 150)) {
+	      vita2d_draw_fill_circle((b * 60) + 30, 30, 30, 0xffff0000 );
+	    }
 	}
 	
 	pcm_analysis_frame_counter ++;
+	fft_counter = (fft_counter + 1) % FFT_HISTORY_SIZE;
 
 	sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_ANALYSED);
-	
-	debug_analysis(_analysis_band_data);
+
+	vita2d_end_drawing();
+	vita2d_swap_buffers();
     }
     return 0;
 }
@@ -495,5 +445,6 @@ int bgm_analyse_thread_worker (SceSize args, void * arg) {
 // Trigger the load thread to start loading a file
 void bgm_start ()
 {
+    vita2d_init();
     sceKernelSetEventFlag(_decode_event_flag, EVF_START_DECODE);
 }
