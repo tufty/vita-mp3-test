@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <arm_neon.h>
 
-static verlet_pool_t _pool;
+verlet_pool_t _pool;
 
-void init_verlet_pool() {
+void verlet_pool_init() {
   for (int i = 0; i < VERLETS; i++) {
     for (int d = 0; d < DIMENSIONS; d++) {
       _pool._pos_then[d][i] = 0;
@@ -21,7 +21,7 @@ void init_verlet_pool() {
 }
 
 
-void integrate (float dt_over_dt, float dt_squared) {
+void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
   /* Vector versions of the arguments */
   float32x4_t dtdt, dt2;
   

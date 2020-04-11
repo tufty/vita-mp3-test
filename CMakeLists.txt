@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
   src/kiss_fftr.c
   src/debugScreen.c
   src/verlet.c
+  src/display.c
 )
 
 # Library to link to (drop the -l prefix). This will mostly be stubs.

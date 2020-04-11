@@ -8,8 +8,6 @@
 #include <psp2/audioout.h>
 #include <psp2/audiodec.h>
 
-#include <vita2d.h>
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -385,8 +383,6 @@ int bgm_analyse_thread_worker (SceSize args, void * arg) {
     
     while (1) {
 	sceKernelWaitEventFlag(_analysis_event_flag, EVF_FRAME_PLAYED, SCE_EVENT_WAITCLEAR_PAT, NULL, NULL);
-	vita2d_start_drawing();
-	vita2d_clear_screen();	
 
 	
 	/* Distance calc and spread to make real / imaginary */
@@ -419,15 +415,6 @@ int bgm_analyse_thread_worker (SceSize args, void * arg) {
 	    _band_averages[b] = total / FFT_HISTORY_SIZE;
 	    variance /= (FFT_HISTORY_SIZE - 1);
 
-	    vita2d_draw_rectangle(b * 60, 540, 59, -1 * (_band_averages[b] / 60), 0xff00ff00);  
-	    /* vita2d_draw_line(b * 60, 540 - _analysis_band_data[fft_counter][b], */
-	    /* 		     (b + 1) * 60, 540 - _analysis_band_data[fft_counter][b], 0xff000000); */
-
-	    /* Did we get a beat on this band? */
-	    if ((_band_averages[b] * 150 < _analysis_band_data[fft_counter][b]) &&
-		(variance > 150)) {
-	      vita2d_draw_fill_circle((b * 60) + 30, 30, 30, 0xffff0000 );
-	    }
 	}
 	
 	pcm_analysis_frame_counter ++;
@@ -435,8 +422,6 @@ int bgm_analyse_thread_worker (SceSize args, void * arg) {
 
 	sceKernelSetEventFlag(_decode_event_flag, EVF_FRAME_ANALYSED);
 
-	vita2d_end_drawing();
-	vita2d_swap_buffers();
     }
     return 0;
 }
@@ -445,6 +430,5 @@ int bgm_analyse_thread_worker (SceSize args, void * arg) {
 // Trigger the load thread to start loading a file
 void bgm_start ()
 {
-    vita2d_init();
     sceKernelSetEventFlag(_decode_event_flag, EVF_START_DECODE);
 }
