@@ -1,6 +1,7 @@
 #include "verlet.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <arm_neon.h>
 
 static verlet_pool_t _pool;
@@ -13,13 +14,52 @@ void init_verlet_pool() {
       _pool._forces[d][i] = 0;
       _pool._direction[d][i] = 0;
     }
-    vzero            = vdupq_n_f32(0.0);
-    vone             = vdupq_n_f32(1.0);
-    v00ff00ff        = vdupq_n_u32(0x00ff00ff);
-    v0f0f0f0f        = vdupq_n_u32(0x0f0f0f0f);
-    v33333333        = vdupq_n_u32(0x33333333);
-    v55555555        = vdupq_n_u32(0x55555555);
+    _pool._type[i] = 0;
+    _pool._one_over_mass[i] = 0;
+    _pool._morton[i] = 0;
+  }
+}
+
+
+void integrate (float dt_over_dt, float dt_squared) {
+  /* Vector versions of the arguments */
+  float32x4_t dtdt, dt2;
+  
+  /* Constants we'll be wanting */
+  float32x4_t vzero, vone;
+  uint32x4_t v00ff00ff, v0f0f0f0f, v33333333, v55555555;
+
+  /* Values we read and write from / to the pool */
+  float32x4_t forces[2], pos_then[2], pos_now[2], direction[2];
+  float32x4_t one_over_mass;
+
+  /* Local variables */
+  float32x4_t acceleration[2], norm;
+  uint32x4_t morton[2], tmp;
+
+  /* set up our loop invariants */
+  dtdt             = vdupq_n_f32(dt_over_dt);
+  dtdt             = vdupq_n_f32(dt_squared);
+  
+  vzero            = vdupq_n_f32(0.0);
+  vone             = vdupq_n_f32(1.0);
+  v00ff00ff        = vdupq_n_u32(0x00ff00ff);
+  v0f0f0f0f        = vdupq_n_u32(0x0f0f0f0f);
+  v33333333        = vdupq_n_u32(0x33333333);
+  v55555555        = vdupq_n_u32(0x55555555);
+  
+  /* Loop through, 4-wise */
+  for (int i = 0; i < (VERLETS / 4); i++) {
+    /* Load values */
+    pos_now[0]    = vld1q_f32(&(_pool._pos_now[0][i << 2]));
+    pos_then[0]   = vld1q_f32(&(_pool._pos_then[0][i << 2]));
+    forces[0]     = vld1q_f32(&(_pool._forces[0][i << 2]));
+    pos_now[1]    = vld1q_f32(&(_pool._pos_now[1][i << 2]));
+    pos_then[1]   = vld1q_f32(&(_pool._pos_then[1][i << 2]));
+    forces[1]     = vld1q_f32(&(_pool._forces[1][i << 2]));
     
+    one_over_mass = vld1q_f32(&(_pool._one_over_mass[i << 2]));
+
     /* Start calculating */
     /* acceleration */
     acceleration[0] = vmulq_f32(forces[0], one_over_mass);
@@ -111,57 +151,12 @@ void init_verlet_pool() {
   }
 }
 
-
-
-#if 0
-
-
-void integrate (float dt_over_dt, float dt_squared) {
-
-  // With luck, this will get vectorised and I won't have to bother doing it manually
-  for (int i = 0; i < VERLETS; i++) {
-    verlet_t distance = 0;
-    _pool._morton[i] = 0;
-    
-    for (int d = 0; d < DIMENSIONS; d++) {
-      verlet_t acceleration, new_pos;
-      // The actual verlet integration
-      acceleration = _pool._forces[d][i] * _pool._one_over_mass[i];
-      _pool._direction[d][i] = _pool._pos_now[d][i] - _pool._pos_then[d][i];
-      _pool._pos_then[d][i] = _pool._pos_now[d][i];
-      
-      /* new_pos = fmaf(_pool._direction[d][i], dt_over_dt, _pool._pos_now[d][i]); */
-      /* new_pos = fmaf (acceleration, dt_squared, new_pos); */
-      new_pos = (_pool._direction[d][i] * dt_over_dt) + _pool._pos_now[d][i] + (acceleration * dt_squared);
-
-      // clamp to 0 <= x <= 1.  This should be being vectorised to vsat, but it's not.
-      _pool._pos_now[d][i] = fminf(fmaxf(new_pos, 0), 1);
-
-      distance += _pool._direction[d][i] * _pool._direction[d][i];
-    }
-
-    distance = 1 / sqrtf(distance);
-
-    /* Scale direction to unit size */
-    _pool._direction[0][i] *= distance;
-    _pool._direction[1][i] *= distance;
-
-    /* scale position to 0 <= x <= 1024 */
-    int32_t m[2] = { ldexpf(_pool._pos_now[0][i], 10), ldexpf(_pool._pos_now[1][i], 10)};
-
-    /* Calculate morton order by bit twiddlery */
-    m[0] = (m[0] | (m[0] << 8)) & 0x00ff00ff;
-    m[0] = (m[0] | (m[0] << 4)) & 0x0f0f0f0f;
-    m[0] = (m[0] | (m[0] << 2)) & 0x33333333;
-    m[0] = (m[0] | (m[0] << 1)) & 0x55555555;
-    m[1] = (m[1] | (m[1] << 8)) & 0x00ff00ff;
-    m[1] = (m[1] | (m[1] << 4)) & 0x0f0f0f0f;
-    m[1] = (m[1] | (m[1] << 2)) & 0x33333333;
-    m[1] = (m[1] | (m[1] << 1)) & 0x55555555;
-    
-    _pool._morton[i] = m[0] + (m[1] << 1);
-      
-  }
+int morton_comp(const void * e1, const void* e2) {
+  uint32_t m1 = _pool._morton[*((const uint16_t *)e1)];
+  uint32_t m2 = _pool._morton[*((const uint16_t *)e2)];
+  return m1 - m2;
 }
 
-#endif
+void sort_by_morton(uint16_t * array) {
+  qsort(array, VERLETS, sizeof(uint16_t), morton_comp);
+}
