@@ -14,6 +14,7 @@ void verlet_pool_init() {
       _pool._forces[d][i] = 0;
       _pool._direction[d][i] = 0;
     }
+    _pool._forces[1][i] = 0.001;
     _pool._type[i] = 0;
     _pool._one_over_mass[i] = 0;
     _pool._morton[i] = 0;
@@ -39,7 +40,7 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
 
   /* set up our loop invariants */
   dtdt             = vdupq_n_f32(dt_over_dt);
-  dtdt             = vdupq_n_f32(dt_squared);
+  dt2              = vdupq_n_f32(dt_squared);
   
   vzero            = vdupq_n_f32(0.0);
   vone             = vdupq_n_f32(1.0);
@@ -66,19 +67,25 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
     acceleration[1] = vmulq_f32(forces[1], one_over_mass);
 
     /* direction */
-    direction[0] = vsubq_f32(pos_then[0], pos_now[0]);
-    direction[1] = vsubq_f32(pos_then[1], pos_now[1]);
+    direction[0] = vsubq_f32(pos_now[0], pos_then[0]);
+    direction[1] = vsubq_f32(pos_now[1], pos_then[1]);
 
     /* size of direction */
     norm = vmulq_f32(direction[0], direction[0]);
-    norm = vmlaq_f32(direction[1], direction[1], norm);
+    norm = vmlaq_f32(norm, direction[1], direction[1]);
+
+    /* Deal with case where direction is zero */
+    tmp = vceqq_f32(vzero, norm);
+    norm = vbslq_f32(tmp, vone, norm);
+
+    /* scale */
     norm = vrsqrteq_f32(norm);
 
     /* scale direction to unit vector */
     direction[0] = vmulq_f32(direction[0], norm);
     direction[1] = vmulq_f32(direction[1], norm);
 
-    /* Store the new "then" (old "now") */
+    /* Store the new direction vector */
     vst1q_f32(&(_pool._direction[0][i << 2]), direction[0]);
     vst1q_f32(&(_pool._direction[1][i << 2]), direction[1]);
 
@@ -87,10 +94,10 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
     vst1q_f32(&(_pool._pos_then[1][i << 2]), pos_now[1]);
 
     /* Calculate the new now */
-    pos_now[0] = vmlaq_f32(direction[0], dtdt, pos_then[0]);
-    pos_now[0] = vmlaq_f32(acceleration[0], dt2, pos_now[0]);
-    pos_now[1] = vmlaq_f32(direction[1], dtdt, pos_then[1]);
-    pos_now[1] = vmlaq_f32(acceleration[1], dt2, pos_now[1]);
+    pos_now[0] = vmlaq_f32(pos_now[0], direction[0], dtdt);
+    pos_now[0] = vmlaq_f32(pos_now[0], acceleration[0], dt2);
+    pos_now[1] = vmlaq_f32(pos_now[1], direction[1], dtdt);
+    pos_now[1] = vmlaq_f32(pos_now[1], acceleration[1], dt2);
 
     /* clamp to 0 <= n <= 1 */
     pos_now[0] = vminq_f32(pos_now[0], vone);

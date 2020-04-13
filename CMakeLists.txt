@@ -31,8 +31,8 @@ set(VITA_VERSION  "01.00")
 
 ## Flags and includes for building
 # Note that we make sure not to overwrite previous flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -O3 -g -DFIXED_POINT=16")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -O3 -g -DFIXED_POINT=16")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -O0 -g -DFIXED_POINT=16")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -O0 -g -DFIXED_POINT=16")
 # Optional. You can specify more param.sfo flags this way.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
 
@@ -64,6 +64,7 @@ add_executable(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
   vita2d
   SceDisplay_stub
+  ScePgf_stub
   SceAudio_stub
   SceAudiodec_stub
   SceGxm_stub
