@@ -21,7 +21,7 @@ typedef struct {
 extern verlet_pool_t _pool;
 
 void verlet_pool_init();
-void verlet_pool_integrate (float dt_over_dt, float dt_squared);
+void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squared);
 
 /* Sort a block of 1024 16 bit indexes into the pool by their morton order */
 void sort_by_morton(uint16_t * array);

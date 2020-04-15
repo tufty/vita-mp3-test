@@ -1,3 +1,3 @@
 #pragma once
 
-void display_objects();
+void display_objects(uint16_t target);

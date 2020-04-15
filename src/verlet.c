@@ -14,7 +14,6 @@ void verlet_pool_init() {
       _pool._forces[d][i] = 0;
       _pool._direction[d][i] = 0;
     }
-    _pool._forces[1][i] = 0.001;
     _pool._type[i] = 0;
     _pool._one_over_mass[i] = 0;
     _pool._morton[i] = 0;
@@ -22,12 +21,12 @@ void verlet_pool_init() {
 }
 
 
-void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
+void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squared) {
   /* Vector versions of the arguments */
   float32x4_t dtdt, dt2;
   
   /* Constants we'll be wanting */
-  float32x4_t vzero, vone;
+  float32x4_t vzero, vone, v1024;
   uint32x4_t v00ff00ff, v0f0f0f0f, v33333333, v55555555;
 
   /* Values we read and write from / to the pool */
@@ -44,6 +43,7 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
   
   vzero            = vdupq_n_f32(0.0);
   vone             = vdupq_n_f32(1.0);
+  v1024            = vdupq_n_f32(1024.0);
   v00ff00ff        = vdupq_n_u32(0x00ff00ff);
   v0f0f0f0f        = vdupq_n_u32(0x0f0f0f0f);
   v33333333        = vdupq_n_u32(0x33333333);
@@ -52,14 +52,14 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
   /* Loop through, 4-wise */
   for (int i = 0; i < (VERLETS / 4); i++) {
     /* Load values */
-    pos_now[0]    = vld1q_f32(&(_pool._pos_now[0][i << 2]));
-    pos_then[0]   = vld1q_f32(&(_pool._pos_then[0][i << 2]));
-    forces[0]     = vld1q_f32(&(_pool._forces[0][i << 2]));
-    pos_now[1]    = vld1q_f32(&(_pool._pos_now[1][i << 2]));
-    pos_then[1]   = vld1q_f32(&(_pool._pos_then[1][i << 2]));
-    forces[1]     = vld1q_f32(&(_pool._forces[1][i << 2]));
+    pos_now[0]    = vld1q_f32(&(pool->_pos_now[0][i << 2]));
+    pos_then[0]   = vld1q_f32(&(pool->_pos_then[0][i << 2]));
+    forces[0]     = vld1q_f32(&(pool->_forces[0][i << 2]));
+    pos_now[1]    = vld1q_f32(&(pool->_pos_now[1][i << 2]));
+    pos_then[1]   = vld1q_f32(&(pool->_pos_then[1][i << 2]));
+    forces[1]     = vld1q_f32(&(pool->_forces[1][i << 2]));
     
-    one_over_mass = vld1q_f32(&(_pool._one_over_mass[i << 2]));
+    one_over_mass = vld1q_f32(&(pool->_one_over_mass[i << 2]));
 
     /* Start calculating */
     /* acceleration */
@@ -81,17 +81,9 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
     /* scale */
     norm = vrsqrteq_f32(norm);
 
-    /* scale direction to unit vector */
-    direction[0] = vmulq_f32(direction[0], norm);
-    direction[1] = vmulq_f32(direction[1], norm);
-
-    /* Store the new direction vector */
-    vst1q_f32(&(_pool._direction[0][i << 2]), direction[0]);
-    vst1q_f32(&(_pool._direction[1][i << 2]), direction[1]);
-
     /* Store the new "then" (old "now") */
-    vst1q_f32(&(_pool._pos_then[0][i << 2]), pos_now[0]);
-    vst1q_f32(&(_pool._pos_then[1][i << 2]), pos_now[1]);
+    vst1q_f32(&(pool->_pos_then[0][i << 2]), pos_now[0]);
+    vst1q_f32(&(pool->_pos_then[1][i << 2]), pos_now[1]);
 
     /* Calculate the new now */
     pos_now[0] = vmlaq_f32(pos_now[0], direction[0], dtdt);
@@ -99,18 +91,26 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
     pos_now[1] = vmlaq_f32(pos_now[1], direction[1], dtdt);
     pos_now[1] = vmlaq_f32(pos_now[1], acceleration[1], dt2);
 
-    /* clamp to 0 <= n <= 1 */
-    pos_now[0] = vminq_f32(pos_now[0], vone);
+    /* clamp to 0 <= n <= 1024 */
+    pos_now[0] = vminq_f32(pos_now[0], v1024);
     pos_now[0] = vmaxq_f32(pos_now[0], vzero);
-    pos_now[1] = vminq_f32(pos_now[1], vone);
+    pos_now[1] = vminq_f32(pos_now[1], v1024);
     pos_now[1] = vmaxq_f32(pos_now[1], vzero);
 
     /* Store the new "now" */
-    vst1q_f32(&(_pool._pos_now[0][i << 2]), pos_now[0]);
-    vst1q_f32(&(_pool._pos_now[1][i << 2]), pos_now[1]);
+    vst1q_f32(&(pool->_pos_now[0][i << 2]), pos_now[0]);
+    vst1q_f32(&(pool->_pos_now[1][i << 2]), pos_now[1]);
+
+    /* scale direction to unit vector */
+    direction[0] = vmulq_f32(direction[0], norm);
+    direction[1] = vmulq_f32(direction[1], norm);
+
+    /* Store the new direction vector */
+    vst1q_f32(&(pool->_direction[0][i << 2]), direction[0]);
+    vst1q_f32(&(pool->_direction[1][i << 2]), direction[1]);
 
     /* Scale up for morton calculation */
-    pos_now[0] = vmulq_n_f32(pos_now[0], 1024);
+    //   pos_now[0] = vmulq_n_f32(pos_now[0], 1024);
 
     /* Convert to integer */
     morton[0] = vcvtq_u32_f32(pos_now[0]);
@@ -131,7 +131,7 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
 
     /* Same for y element */
     /* Scale up for morton calculation */
-    pos_now[1] = vmulq_n_f32(pos_now[1], 1024);
+    //    pos_now[1] = vmulq_n_f32(pos_now[1], 1024);
 
     /* Convert to integer */
     morton[1] = vcvtq_u32_f32(pos_now[1]);
@@ -153,10 +153,12 @@ void verlet_pool_integrate (float dt_over_dt, float dt_squared) {
     /* Combine and save */
     morton[1] = vshlq_n_u32(morton[1], 1);
     tmp = vorrq_u32(morton[0], morton[1]);
-    vst1q_u32(&(_pool._morton[i << 2]), tmp);
+    vst1q_u32(&(pool->_morton[i << 2]), tmp);
       
   }
 }
+
+
 
 int morton_comp(const void * e1, const void* e2) {
   uint32_t m1 = _pool._morton[*((const uint16_t *)e1)];
