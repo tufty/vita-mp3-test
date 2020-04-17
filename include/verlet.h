@@ -9,8 +9,8 @@
 typedef float verlet_t;
 
 typedef struct {
-  verlet_t _type[VERLETS]                  VERLET_ALIGN;
-  uint32_t _morton[VERLETS]                VERLET_ALIGN;
+  uint8_t _type[VERLETS]                  VERLET_ALIGN;
+  uint16_t _morton[VERLETS]                VERLET_ALIGN;
   verlet_t _one_over_mass[VERLETS]         VERLET_ALIGN;
   verlet_t _forces[DIMENSIONS][VERLETS]    VERLET_ALIGN;
   verlet_t _direction[DIMENSIONS][VERLETS] VERLET_ALIGN;
