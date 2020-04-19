@@ -1,3 +1,5 @@
 #pragma once
 
-void display_objects(uint16_t target);
+#include <stdint.h>
+
+void display_objects();

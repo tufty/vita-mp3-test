@@ -1,5 +1,4 @@
 #include "bgm.h"
-#include "debugScreen.h"
 #include "kiss_fft.h"
 #include "kiss_fftr.h"
 
@@ -70,7 +69,6 @@ void bgm_init () {
     /* and the mp3 buffer. Enough for the biggest frame possible */
     _mp3_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, MP3_FRAME_SIZE);
     if (NULL == _mp3_buffer) {
-	psvDebugScreenPuts("Failed to allocate mp3 buffer\n");
 	while (1);
     }
     bzero(_mp3_buffer, MP3_FRAME_SIZE);
@@ -78,7 +76,6 @@ void bgm_init () {
     /* Create the PCM buffer, easy enough, space for N frames */
     _pcm_buffer = memalign(SCE_AUDIODEC_ALIGNMENT_SIZE, PCM_FRAME_SIZE * PCM_FRAMES);
     if (NULL == _pcm_buffer) {
-	psvDebugScreenPuts("Failed to allocate pcm buffer\n");
 	while (1);
     }
     bzero(_pcm_buffer, PCM_FRAME_SIZE * PCM_FRAMES);
@@ -86,19 +83,16 @@ void bgm_init () {
     /* Create event flag */
     res = sceKernelCreateEventFlag("_decode_event_flag", SCE_KERNEL_EVF_ATTR_MULTI, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to create event flag : 0x%x\n", res);
 	while (1);    
     }
     _decode_event_flag = res;
     res = sceKernelCreateEventFlag("_playback_event_flag", SCE_KERNEL_EVF_ATTR_MULTI, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to create event flag : 0x%x\n", res);
 	while (1);    
     }
     _playback_event_flag = res;
     res = sceKernelCreateEventFlag("_analysis_event_flag", SCE_KERNEL_EVF_ATTR_MULTI, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to create event flag : 0x%x\n", res);
 	while (1);    
     }
     _analysis_event_flag = res;
@@ -106,21 +100,18 @@ void bgm_init () {
     // Create the threads
     res = sceKernelCreateThread("bgm_decode_thread", bgm_decode_thread_worker, SCE_KERNEL_CURRENT_THREAD_PRIORITY, _stack_size, 0, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to create decode thread : 0x%x\n", res);
 	while (1);    
     }
     _bgm_decode_thread = res;
 
     res = sceKernelCreateThread("bgm_play_thread", bgm_play_thread_worker, SCE_KERNEL_CURRENT_THREAD_PRIORITY, _stack_size, 0, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to create play thread : 0x%x\n", res);
 	while (1);    
     }
     _bgm_play_thread = res;
   
     res = sceKernelCreateThread("bgm_analyse_thread", bgm_analyse_thread_worker, SCE_KERNEL_CURRENT_THREAD_PRIORITY, _stack_size, 0, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to create analysis thread : 0x%x\n", res);
 	while (1);    
     }
     _bgm_analyse_thread = res;
@@ -128,17 +119,14 @@ void bgm_init () {
     // And start them.  Initially they will do nothing, waiting for an external event
     res = sceKernelStartThread(_bgm_decode_thread, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to start decode thread : 0x%x\n", res);
 	while (1);    
     }
     res = sceKernelStartThread(_bgm_play_thread, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to start playback thread : 0x%x\n", res);
 	while (1);    
     }
     res = sceKernelStartThread(_bgm_analyse_thread, 0, NULL);
     if (0 > res) {
-	psvDebugScreenPrintf("Failed to start analysis thread : 0x%x\n", res);
 	while (1);    
     }
 }
@@ -160,7 +148,6 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
   
     ret = sceAudiodecInitLibrary(SCE_AUDIODEC_TYPE_MP3, &init);
     if (0 > ret) {
-	psvDebugScreenPrintf("Failed to initialise audiodecInitParam : 0x%x\n", ret);
 	while (1);    
     }
  
@@ -184,7 +171,6 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 
 	/* open file */
 	if ((fdesc = sceIoOpen (bgm_file_name, SCE_O_RDONLY, 0)) < 0) {
-	    psvDebugScreenPrintf("Failed to load file %s\n", bgm_file_name);
 	    while (1);    
 	} else {
 	    /* find its length */
@@ -193,7 +179,6 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 
 	    /* quick sanity check */
 	    if (MP3_FRAME_HEADER_SIZE >= flen) {
-		psvDebugScreenPrintf("Wierd file length %i\n", flen);
 		while (1);    
 	    }
 
@@ -247,14 +232,12 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 			    audio.freq = 32000;
 			    break;
 			default:
-			    psvDebugScreenPrintf("MP3 header frequency broken\n");
 			    while (1);    
 			}
 
 			/* create our decoder */
 			ret = sceAudiodecCreateDecoder(&ctrl, SCE_AUDIODEC_TYPE_MP3);
 			if (0 > ret) {
-			    psvDebugScreenPrintf("Failed to create decoder 0x%x\n", ret);
 			    while (1);    
 			}
 
@@ -267,7 +250,6 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 	    
 		    ret = sceAudiodecDecodeNFrames(&ctrl, 1);
 		    if (0 > ret) {
-			psvDebugScreenPrintf("Failed to decode frame 0x%x\n", ret);
 			while (1);    
 		    }
 
@@ -286,7 +268,6 @@ int bgm_decode_thread_worker (SceSize args, void * arg) {
 		    }
 		} else {
 		    /* Bad frame, crash out */
-		    psvDebugScreenPrintf("Bad Frame, header %#02x %#02x %#02x %#02x at %#08x", _mp3_buffer[0], _mp3_buffer[1], _mp3_buffer[2], _mp3_buffer[3], foffset);
 		    foffset = flen;
 		}
 	    }
@@ -304,7 +285,6 @@ void play_available_frames(SceUID port) {
 	sceKernelSetEventFlag(_analysis_event_flag, EVF_FRAME_PLAYED);
 	int ret = sceAudioOutOutput(port, pcm_pointer(pcm_playback_frame_counter));
 	if (0 > ret) {
-	    psvDebugScreenPrintf("Play failed frame %u error %#08x", pcm_playback_frame_counter, ret);
 	}
 
 	pcm_playback_frame_counter++;
@@ -327,7 +307,6 @@ int bgm_play_thread_worker (SceSize args, void * arg) {
     // Open a port for the new stream
     SceUID output_port = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, SCE_AUDIODEC_MP3_MAX_SAMPLES, 44100, SCE_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
     if (0 > output_port) {
-	psvDebugScreenPrintf("Failed to create output port 0x%x\n", output_port);
 	while (1);    
     }
 

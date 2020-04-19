@@ -214,7 +214,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
       last_m = m;
     }
   }
-  
+
 }
 
 int morton_comp(const void * e1, const void* e2) {

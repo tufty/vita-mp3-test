@@ -31,8 +31,8 @@ set(VITA_VERSION  "01.00")
 
 ## Flags and includes for building
 # Note that we make sure not to overwrite previous flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -O3 -g -DFIXED_POINT=16")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -O3 -g -DFIXED_POINT=16")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -O0 -g -DFIXED_POINT=16")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -O0 -g -DFIXED_POINT=16")
 # Optional. You can specify more param.sfo flags this way.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
 
@@ -55,9 +55,9 @@ add_executable(${PROJECT_NAME}
   src/bgm.c
   src/kiss_fft.c
   src/kiss_fftr.c
-  src/debugScreen.c
   src/verlet.c
   src/display.c
+  src/collider.c
 )
 
 # Library to link to (drop the -l prefix). This will mostly be stubs.
