@@ -2,24 +2,19 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <arm_neon.h>
 
 verlet_pool_t _pool;
 uint16_t _object_index[VERLETS];
 uint16_t _morton_index[VERLETS];
 
-void verlet_pool_init() {
+void verlet_pool_init(verlet_pool_t * pool) {
+
+  bzero(pool, sizeof(verlet_pool_t));
+  
   for (int i = 0; i < VERLETS; i++) {
-    for (int d = 0; d < DIMENSIONS; d++) {
-      _pool._pos_then[d][i] = 0;
-      _pool._pos_now[d][i] = 0;
-      _pool._forces[d][i] = 0;
-      _pool._direction[d][i] = 0;
-    }
-    _pool._type[i] = 0;
-    _pool._one_over_mass[i] = 0;
-    _pool._morton[i] = 0;
-    _pool._collide[i] = 0;
+    pool->_type[i] = 0xffff;
   }
 }
 
@@ -42,10 +37,14 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     uint8x16_t vmorton5;
   } vmorton;
   
-  uint16x8_t vbit4, v21212121, tmp16_0, tmp16_1;
-  uint16x4_t tmp16_3, vzero16, vf000, morton;
+  uint16x8_t vbit4, vbit45, v000f, v21212121, tmp16_0, tmp16_1, raw_morton, morton_side, m01, m23;
+  uint16x4_t tmp16_3, vffff, vf000, morton;
   uint32x4_t tmp32_0, tmp32_1;
   uint16x8x2_t tmp16_2;
+
+  int16x8_t vones16, vminusones16, offsets, vsigned;
+
+  
   union {
     uint8x16_t x16;
     uint8x8x2_t x8x2;
@@ -67,12 +66,19 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
   vzero            = vdupq_n_f32(0.0);
   vone             = vdupq_n_f32(1.0);
   v1023            = vdupq_n_f32(1023.0);
-  vzero16          = vdup_n_u16(0);
+  vffff            = vdup_n_u16(0xffff);
   vf000            = vdup_n_u16(0xf000);
 
   vbit4            = vdupq_n_u16(0x10);
   vmorton.vmorton5 = vld1q_u8(morton5);
   v21212121        = vld1q_u16(x21212121);
+
+  vbit45           = vdupq_n_u16(0x30);
+  v000f            = vdupq_n_u16(0x000f);
+
+  vones16          = vdupq_n_s16(1);
+  vminusones16     = vdupq_n_s16(-1);
+ 
  
   /* Loop through, 4-wise */
   for (int i = 0; i < (VERLETS / 4); i++) {
@@ -149,16 +155,21 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     tmp16_1 = vreinterpretq_u16_u32(tmp32_1);
 
     /* We can now do a vector transpose, which will interleave the values in the first val element of the result */
+    /* order y x y x y x y x */
     tmp16_2 = vtrnq_u16(tmp16_0, tmp16_1);
 
-    /* We can now do the math we need.  Firstly, shift the whole lot right by 5 */
-    tmp16_0 = vshrq_n_u16(tmp16_2.val[0], 5);
+    /* We can now do the math we need. */
+    /* Save which "side" we're on.  If (n % 32) > 15, bit 4 will be set */
+    morton_side = vtstq_u16(tmp16_2.val[0], vbit4);
+		
+    /* Shift the whole lot right by 5, thus dividing by 32 */
+    raw_morton = vshrq_n_u16(tmp16_2.val[0], 5);
 
-    /* extract bit 4 and clear from source */
-    tmp16_1 = vandq_u16(tmp16_0, vbit4);
-    tmp16_0 = vbicq_u16(tmp16_0, vbit4);
+    /* extract bit 4 & 5, and clear from source */
+    tmp16_1 = vandq_u16(raw_morton, vbit45);
+    tmp16_0 = vandq_u16(raw_morton, v000f);
 
-    /* then shift bit 4 to bit 8, and reinject */
+    /* then shift bit 4 & 5 to bit 8 & 9, and reinject */
     tmp16_0 = vmlaq_n_u16(tmp16_0, tmp16_1, 16);
 
     /* now reinterpret as uint8x16 */
@@ -168,11 +179,38 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     tmp8.x8x2.val[0] = vtbl2_u8(vmorton.vmorton5x2, tmp8.x8x2.val[0]);
     tmp8.x8x2.val[1] = vtbl2_u8(vmorton.vmorton5x2, tmp8.x8x2.val[1]);
 
-    /* reinterpret back as 16x8 */
-    tmp16_0 = vreinterpretq_u16_u8(tmp8.x16);
+    /* reinterpret back as 16x8, this gives us baseline morton components for collision detection */
+    m01 = vreinterpretq_u16_u8(tmp8.x16);
+    vst1q_u16(pool->_m01[i<<2], m01);
 
-    /* Shifts of every other element */
-    tmp16_0 = vmulq_u16(tmp16_0, v21212121);
+    offsets = vbslq_s16(morton_side, vones16, vminusones16);
+    vsigned = vreinterpretq_s16_u16(raw_morton);
+    vsigned = vaddq_s16(vsigned, offsets);
+    raw_morton = vreinterpretq_u16_s16(vsigned);
+
+    /* We now have raw morton codes in the range -1 <= n <= 32, but want 0 <= n <= 31 */
+    /* Don't worry, this will leave bit 5 set, indicator that the morton code is invalid */
+    /* extract bit 4 & 5, and clear from source */
+    tmp16_1 = vandq_u16(raw_morton, vbit45);
+    tmp16_0 = vandq_u16(raw_morton, v000f);
+
+    /* then shift bit 4 & 5 to bit 8 & 9, and reinject */
+    tmp16_0 = vmlaq_n_u16(tmp16_0, tmp16_1, 16);
+
+    /* now reinterpret as uint8x16 */
+    tmp8.x16 = vreinterpretq_u8_u16(tmp16_0);
+
+    /* Do the table lookups */
+    tmp8.x8x2.val[0] = vtbl2_u8(vmorton.vmorton5x2, tmp8.x8x2.val[0]);
+    tmp8.x8x2.val[1] = vtbl2_u8(vmorton.vmorton5x2, tmp8.x8x2.val[1]);
+
+    /* reinterpret back as 16x8, this gives us baseline morton components */
+    m23 = vreinterpretq_u16_u8(tmp8.x16);
+    vst1q_u16(pool->_m23[i<<2], m23);
+
+    /* back to our actual morton code */
+    /* Shift the baseline y morton components by 2 */
+    tmp16_0 = vmulq_u16(m01, v21212121);
 
     /* Combine to final value */
     tmp32_0 = vpaddlq_u16(tmp16_0);
@@ -180,8 +218,8 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     /* go to u16 */
     morton = vqmovn_u32(tmp32_0);
 
-    /* Set high byte for objects with zero type */
-    tmp16_3 = vceq_u16(type, vzero16);
+    /* Set high byte for objects with type of 0xffff */
+    tmp16_3 = vceq_u16(type, vffff);
     tmp16_3 = vand_u16(tmp16_3, vf000);    
     morton = vadd_u16(morton, tmp16_3);
 
@@ -189,30 +227,37 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     vst1_u16(&(pool->_morton[i << 2]), morton);
 
     // Set up the index while we're at it.
-    _object_index [(i << 2)] = (i << 2);
-    _object_index [(i << 2) + 1] = (i << 2) + 1;
-    _object_index [(i << 2) + 2] = (i << 2) + 2;
-    _object_index [(i << 2) + 3] = (i << 2) + 3;
+    pool->_object_index [(i << 2)] = (i << 2);
+    pool->_object_index [(i << 2) + 1] = (i << 2) + 1;
+    pool->_object_index [(i << 2) + 2] = (i << 2) + 2;
+    pool->_object_index [(i << 2) + 3] = (i << 2) + 3;
   }
 
   /* Sort the object index */
-  qsort(_object_index, VERLETS, sizeof(uint16_t), morton_comp);
+  qsort(pool->_object_index, VERLETS, sizeof(uint16_t), morton_comp);
 
   /* And create an index of morton code to entry in object index */
   int last_m = -1;
   for (int i = 0; i < VERLETS; i++) { /* Index into _object_index */
-
-    _pool._collide[i] = 0; /* TODO TESTING */
     
-    uint16_t o = _object_index[i];    /* Index to the object in _pool */
-    uint16_t m = _pool._morton[o];    /* Morton code for the object */
+    uint16_t o = pool->_object_index[i];    /* Index to the object in _pool */
+    uint16_t m = pool->_morton[o];    /* Morton code for the object */
+
+    if (m & 0xf000) {
+      break;
+    }
 
     if (last_m < m) {                 /* We have a new morton code */
       for (int j = last_m + 1; j <= m; j++) {
-	_morton_index[j] = i; 
+	pool->_morton_index[j] = i; 
       }
       last_m = m;
     }
+  }
+  if (last_m != 0x3ff) {
+      for (int j = last_m + 1; j <= 0x3ff; j++) {
+	pool->_morton_index[j] = 0x3ff; 
+      }
   }
 
 }
