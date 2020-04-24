@@ -104,6 +104,21 @@ void collide_objects(verlet_pool_t * pool) {
 }
 
 void draw_objects(verlet_pool_t * pool) {
+  SceGxmContext * context = vita2d_get_context();
+
+  sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 32, 32, 960 + 32, 540 + 32);
+  // sceGxmSetViewport(context, 32, -1, 32, -1, 0.5, 0.5);
+
+  
+    /* Draw a grid, test usage only */
+    uint32_t grid_color = 0x808080ff;
+    
+    for (int i = 0; i < 1024; i += 32) {
+      vita2d_draw_line(i, 0, i, 1024, grid_color);
+      vita2d_draw_line(0, i, 1024, i, grid_color);
+    }
+
+  
   for (int i = 0; i < VERLETS; i++) {
     /* iterate through the objects in morton order */
     uint16_t o = pool->_object_index[i];
@@ -115,6 +130,9 @@ void draw_objects(verlet_pool_t * pool) {
     }
     _object_types[t]._draw(pool, o);
   }
+
+  sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 0, 0, 960, 540);
+
 }
 
 void object_init_generic(uint16_t type, verlet_pool_t * pool, uint16_t object, float x, float y) {
@@ -136,8 +154,9 @@ void object_step_generic(verlet_pool_t * pool, uint16_t object, float dt_over_dt
 /* Generic object drawing, probably need to make this centre the bitmap */
 void object_draw_generic(verlet_pool_t * pool, uint16_t object) {
   uint16_t type = pool->_type[object];
+  vita2d_texture * t = _object_types[type]._bitmap;
 
-  vita2d_draw_texture(_object_types[type]._bitmap, pool->_pos_now[0][object], pool->_pos_now[1][object]);
+  vita2d_draw_texture(t, pool->_pos_now[0][object] - (vita2d_texture_get_width(t) / 2), pool->_pos_now[1][object] - (vita2d_texture_get_height(t) / 2));
 }
 
 void object_die_generic(verlet_pool_t * pool, uint16_t object) {

@@ -64,17 +64,6 @@ int main(int argc, char *argv[]) {
     
     vita2d_start_drawing();
     vita2d_clear_screen();
-
-
-    /* Draw a grid, test usage only */
-    float xmin = 0, xmax = 960, ymin = 0, ymax = 540;
-    uint32_t grid_color = 0x808080ff;
-    
-    for (int i = 0; i < 1024; i += 32) {
-      float x = i * xmax / 1024, y = i * ymax / 1024; 
-      vita2d_draw_line(x, ymin, x, ymax, grid_color);
-      vita2d_draw_line(xmin, y, xmax, y, grid_color);
-    }
     
     draw_objects(&_pool);
 

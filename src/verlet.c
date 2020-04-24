@@ -99,6 +99,10 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     acceleration[0] = vmulq_f32(forces[0], one_over_mass);
     acceleration[1] = vmulq_f32(forces[1], one_over_mass);
 
+    /* zap the forces */
+    vst1q_f32(&(pool->_forces[0][i << 2]), vzero);
+    vst1q_f32(&(pool->_forces[1][i << 2]), vzero);
+
     /* direction */
     direction[0] = vsubq_f32(pos_now[0], pos_then[0]);
     direction[1] = vsubq_f32(pos_now[1], pos_then[1]);
