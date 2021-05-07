@@ -1,9 +1,9 @@
 #include "player.h"
 #include "objects.h"
 #include "verlet.h"
+#include "player_bullet.h"
 
 #include <psp2/ctrl.h>
-
 
 SceCtrlData controller;
 
@@ -21,6 +21,8 @@ void step_player(verlet_pool_t * pool, uint16_t object, float dt_over_dt, float 
 
   /* Fire button */
   if (controller.buttons & SCE_CTRL_CROSS) {
+    uint16_t bullet = allocate_object();
+    init_player_bullet(pool, bullet, pool->_pos_now[0][object], pool->_pos_now[1][object]);
   }
 
   /* Smart bomb */
@@ -33,10 +35,10 @@ void step_player(verlet_pool_t * pool, uint16_t object, float dt_over_dt, float 
   float yforce = 0 +
     ((controller.buttons & SCE_CTRL_UP) ? -0.01 : 0) +
     ((controller.buttons & SCE_CTRL_DOWN) ? 0.01 : 0);
-  
+
   pool->_forces[0][object] += xforce;
   pool->_forces[1][object] += yforce;
-  
+
 }
 
 /* Check we've not been killed or picked up a powerup */

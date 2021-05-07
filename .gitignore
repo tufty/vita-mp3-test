@@ -1,5 +1,8 @@
 *~
 *.a
 *.o
+*.out
+.DS_Store
 build/*
 audio/*
+CMakeFiles

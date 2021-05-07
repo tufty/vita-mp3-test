@@ -58,6 +58,7 @@ add_executable(${PROJECT_NAME}
   src/verlet.c
   src/objects.c
   src/player.c
+  src/player_bullet.c
 )
 
 # Library to link to (drop the -l prefix). This will mostly be stubs.

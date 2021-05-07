@@ -22,6 +22,7 @@ typedef struct {
 
 enum {
       PLAYER = 0,
+      PLAYER_BULLET, 
       MAX_OBJECT_TYPES
 };
 

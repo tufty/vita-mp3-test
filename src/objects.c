@@ -2,6 +2,7 @@
 
 #include "verlet.h"
 #include "player.h"
+#include "player_bullet.h"
 
 object_t _object_types[MAX_OBJECT_TYPES];
 uint32_t _object_state_bitmap[VERLETS / 4];
@@ -9,13 +10,20 @@ uint32_t _object_state[VERLETS];
 
 
 /* Initialise object types */
-void objects_init () {    
+void objects_init () {
   _object_types[PLAYER]._init = init_player;
   _object_types[PLAYER]._step = step_player;
   _object_types[PLAYER]._draw = object_draw_generic;
   _object_types[PLAYER]._collide = collide_player;
   _object_types[PLAYER]._die = die_player;
   _object_types[PLAYER]._bitmap = vita2d_load_PNG_file("app0:/assets/player.png");
+
+  _object_types[PLAYER_BULLET]._init = init_player_bullet;
+  _object_types[PLAYER_BULLET]._step = step_player_bullet;
+  _object_types[PLAYER_BULLET]._draw = object_draw_generic;
+  _object_types[PLAYER_BULLET]._collide = collide_player_bullet;
+  _object_types[PLAYER_BULLET]._die = object_die_generic;
+  _object_types[PLAYER_BULLET]._bitmap = vita2d_load_PNG_file("app0:/assets/player_bullet.png");
 
   objects_mm_init();
 }
@@ -56,10 +64,9 @@ void step_objects(verlet_pool_t * pool, float dt_over_dt, float dt_squared) {
     if (t == 0xffff) {
       break;
     }
-
-    _object_types[t]._step(pool, i, dt_over_dt, dt_squared); 
+    _object_types[t]._step(pool, i, dt_over_dt, dt_squared);
   }
-  
+
 }
 
 void collide_objects(verlet_pool_t * pool) {
@@ -78,10 +85,10 @@ void collide_objects(verlet_pool_t * pool) {
     uint16_t morton_components[4] =
       {
        pool->_m01[o][0] << 1,
-       pool->_m23[o][0] << 1, 
+       pool->_m23[o][0] << 1,
        pool->_m01[o][1],
        pool->_m23[o][1]
-      };		     
+      };
 
     // And do our collision detection for the 4 possible neighbourhoods
     morton = morton_components[0] | morton_components[2];
@@ -109,21 +116,21 @@ void draw_objects(verlet_pool_t * pool) {
   sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 32, 32, 960 + 32, 540 + 32);
   // sceGxmSetViewport(context, 32, -1, 32, -1, 0.5, 0.5);
 
-  
+
     /* Draw a grid, test usage only */
     uint32_t grid_color = 0x808080ff;
-    
+
     for (int i = 0; i < 1024; i += 32) {
       vita2d_draw_line(i, 0, i, 1024, grid_color);
       vita2d_draw_line(0, i, 1024, i, grid_color);
     }
 
-  
+
   for (int i = 0; i < VERLETS; i++) {
     /* iterate through the objects in morton order */
     uint16_t o = pool->_object_index[i];
     uint16_t t = pool->_type[i];
-    
+
     /* We are done if the object's morton code has its high bit set  */
     if (pool->_type[o] == 0xffff) {
       break;
@@ -167,4 +174,3 @@ void object_die_generic(verlet_pool_t * pool, uint16_t object) {
   pool->_pos_then[1][object] = 0;
   free_object(object);
 }
-
