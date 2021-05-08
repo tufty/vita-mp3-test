@@ -47,6 +47,9 @@ int main(int argc, char *argv[]) {
 
   while(1) {
 
+    /* get controller data */
+    sceCtrlReadBufferPositive(0, &controller, 1);
+
     t0 = t1;
     dt0 = dt1;
     t1 = sceKernelGetProcessTimeWide();
@@ -71,20 +74,38 @@ int main(int argc, char *argv[]) {
       rtot = 0;
     }
 
-    vita2d_pgf_draw_textf(font, 0, 16, 0xffffffff, 1.0, "object : %#04x, morton : %#04x", target, _pool._morton[target]);
+    vita2d_pgf_draw_textf(font, 0, 16, 0xffffffff, 1.0, "# : %u", _object_count);
+    vita2d_pgf_draw_textf(font, 0, 33, 0xffffffff, 1.0, "o : %#04x, t : %#04x, morton : %#04x", target, _pool._type[target], _pool._morton[target]);
+    vita2d_pgf_draw_textf(font, 0, 50, 0xffffffff, 1.0, "Frame : %u, time : %u", frame, avg);
 
-    vita2d_pgf_draw_textf(font, 0, 33, 0xffffffff, 1.0, "Frame : %u, time : %u", frame, avg);
+    {
+      uint16_t oi[4] = {(&_pool)->_object_index[0], (&_pool)->_object_index[1], (&_pool)->_object_index[2], (&_pool)->_object_index[3]};
+      uint16_t ot[4] = {(&_pool)->_type[oi[0]], (&_pool)->_type[oi[1]], (&_pool)->_type[oi[2]], (&_pool)->_type[oi[3]]};
+      uint16_t om[4] = {(&_pool)->_morton[oi[0]], (&_pool)->_morton[oi[1]], (&_pool)->_morton[oi[2]], (&_pool)->_morton[oi[3]]};
+      vita2d_pgf_draw_textf(font, 0, 67, 0xffffffff, 1.0, "[%u %#04x %#04x] [%u %#04x %#04x] [%u %#04x %#04x] [%u %#04x %#04x]", oi[0], ot[0], om[0], oi[1], ot[1], om[1], oi[2], ot[2], om[2], oi[3], ot[3], om[3]);
+    };
+    {
+      uint16_t oi[4] = {(&_pool)->_object_index[4], (&_pool)->_object_index[5], (&_pool)->_object_index[6], (&_pool)->_object_index[7]};
+      uint16_t ot[4] = {(&_pool)->_type[oi[0]], (&_pool)->_type[oi[1]], (&_pool)->_type[oi[2]], (&_pool)->_type[oi[3]]};
+      uint16_t om[4] = {(&_pool)->_morton[oi[0]], (&_pool)->_morton[oi[1]], (&_pool)->_morton[oi[2]], (&_pool)->_morton[oi[3]]};
+      vita2d_pgf_draw_textf(font, 0, 84, 0xffffffff, 1.0, "[%u %#04x %#04x] [%u %#04x %#04x] [%u %#04x %#04x] [%u %#04x %#04x]", oi[0], ot[0], om[0], oi[1], ot[1], om[1], oi[2], ot[2], om[2], oi[3], ot[3], om[3]);
+
+    };
 
     vita2d_end_drawing();
     vita2d_swap_buffers();
 
-    if (controller.buttons & SCE_CTRL_SQUARE) {
-      target = (target + 1) & 0x3ff;
-    }
+    if (controller_ts != controller.timeStamp) {
 
-    if (controller.buttons & SCE_CTRL_CIRCLE) {
-      target = (target - 1) & 0x3ff;
+      if (controller.buttons & SCE_CTRL_SELECT) {
+        target = (target - 1) & 0x3ff;
+      }
+
+      if (controller.buttons & SCE_CTRL_START) {
+        target = (target + 1) & 0x3ff;
+      }
     }
+    controller_ts = controller.timeStamp;
 
   }
 

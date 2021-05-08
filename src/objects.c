@@ -8,6 +8,7 @@ object_t _object_types[MAX_OBJECT_TYPES];
 uint32_t _object_state_bitmap[VERLETS / 4];
 uint32_t _object_state[VERLETS];
 
+uint32_t _object_count;
 
 /* Initialise object types */
 void objects_init () {
@@ -26,6 +27,8 @@ void objects_init () {
   _object_types[PLAYER_BULLET]._bitmap = vita2d_load_PNG_file("app0:/assets/player_bullet.png");
 
   objects_mm_init();
+
+  _object_count = 0;
 }
 
 /* Initialise the memory management bitmap */
@@ -42,6 +45,7 @@ uint16_t allocate_object () {
 
     if (first_clear_bit) {
       _object_state_bitmap[i] |= (1 << (first_clear_bit - 1));
+      _object_count ++;
       return (i * 4) + (first_clear_bit - 1);
     }
 
@@ -53,6 +57,8 @@ void free_object (uint16_t object) {
   int bit = object & 0x1f;
   int word = object >> 5;
 
+  _object_count--;
+
   _object_state_bitmap[word] &= ~(1 << bit);
 }
 
@@ -61,10 +67,10 @@ void step_objects(verlet_pool_t * pool, float dt_over_dt, float dt_squared) {
   for (int i = 0; i < VERLETS; i++) {
     uint16_t o = pool->_object_index[i];
     uint16_t t = pool->_type[o];
-    if (t == 0xffff) {
-      break;
+    if (pool->_morton[o] == 0xf000) {
+      return;
     }
-    _object_types[t]._step(pool, i, dt_over_dt, dt_squared);
+    _object_types[t]._step(pool, o, dt_over_dt, dt_squared);
   }
 
 }
@@ -73,11 +79,11 @@ void collide_objects(verlet_pool_t * pool) {
   for (int i = 0; i < VERLETS; i++) {
     /* iterate through the objects in morton order */
     uint16_t o = pool->_object_index[i];
-    uint16_t t = pool->_type[i];
+    uint16_t t = pool->_type[o];
 
     /* We are done if the object's morton code has its high bit set  */
-    if (pool->_type[o] == 0xffff) {
-      break;
+    if (pool->_morton[o] & 0xf000) {
+      return;
     }
 
     /* Work out which morton codes we must check */
@@ -113,9 +119,10 @@ void collide_objects(verlet_pool_t * pool) {
 void draw_objects(verlet_pool_t * pool) {
   SceGxmContext * context = vita2d_get_context();
 
-  sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 32, 32, 960 + 32, 540 + 32);
-  // sceGxmSetViewport(context, 32, -1, 32, -1, 0.5, 0.5);
+  sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 0, 0, 960, 540);
 
+  // sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 32, 32, 960 + 32, 540 + 32);
+  // sceGxmSetViewport(context, 32, -1, 32, -1, 0.5, 0.5);
 
     /* Draw a grid, test usage only */
     uint32_t grid_color = 0x808080ff;
@@ -129,16 +136,14 @@ void draw_objects(verlet_pool_t * pool) {
   for (int i = 0; i < VERLETS; i++) {
     /* iterate through the objects in morton order */
     uint16_t o = pool->_object_index[i];
-    uint16_t t = pool->_type[i];
+    uint16_t t = pool->_type[o];
 
     /* We are done if the object's morton code has its high bit set  */
-    if (pool->_type[o] == 0xffff) {
-      break;
+    if (pool->_morton[o] == 0xf000) {
+      return;
     }
     _object_types[t]._draw(pool, o);
   }
-
-  sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, 0, 0, 960, 540);
 
 }
 
@@ -152,6 +157,7 @@ void object_init_generic(uint16_t type, verlet_pool_t * pool, uint16_t object, f
   pool->_direction[1][object] = 1;
   pool->_forces[0][object] = 0;
   pool->_forces[1][object] = 0;
+  pool->_morton[object] = 0xf000;
 }
 
 /* Generic object step function, do nothing */
@@ -167,7 +173,8 @@ void object_draw_generic(verlet_pool_t * pool, uint16_t object) {
 }
 
 void object_die_generic(verlet_pool_t * pool, uint16_t object) {
-  pool->_type[object] = -1;
+  pool->_type[object] = 0xffff;
+  pool->_morton[object] = 0xf000;
   pool->_pos_now[0][object] = 0;
   pool->_pos_now[1][object] = 0;
   pool->_pos_then[0][object] = 0;

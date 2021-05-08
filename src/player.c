@@ -6,6 +6,7 @@
 #include <psp2/ctrl.h>
 
 SceCtrlData controller;
+uint64_t controller_ts = 0;
 
 /* Initialise the player object */
 void init_player(verlet_pool_t * pool, uint16_t object, float x, float y) {
@@ -16,39 +17,37 @@ void init_player(verlet_pool_t * pool, uint16_t object, float x, float y) {
 /* For each step of the player object */
 void step_player(verlet_pool_t * pool, uint16_t object, float dt_over_dt, float dt_squared) {
 
-  /* get controller data */
-  sceCtrlReadBufferPositive(0, &controller, 1);
+  float xforce = 0;
+  float yforce = 0;
 
-  /* Fire button */
-  if (controller.buttons & SCE_CTRL_CROSS) {
-    uint16_t bullet = allocate_object();
-    init_player_bullet(pool, bullet, pool->_pos_now[0][object], pool->_pos_now[1][object]);
+  if (controller_ts != controller.timeStamp) {
+    /* Fire button */
+    if (controller.buttons & SCE_CTRL_CROSS) {
+      uint16_t bullet = allocate_object();
+      init_player_bullet(pool, bullet, pool->_pos_now[0][object], pool->_pos_now[1][object]);
+    }
+
+    /* Smart bomb */
+    if (controller.buttons & SCE_CTRL_RTRIGGER) {
+    }
+
+    xforce += ((controller.buttons & SCE_CTRL_LEFT) ? -0.01 : 0) +
+              ((controller.buttons & SCE_CTRL_RIGHT) ? 0.01 : 0);
+              yforce += ((controller.buttons & SCE_CTRL_UP) ? -0.01 : 0) +
+              ((controller.buttons & SCE_CTRL_DOWN) ? 0.01 : 0);
   }
-
-  /* Smart bomb */
-  if (controller.buttons & SCE_CTRL_RTRIGGER) {
-  }
-
-  float xforce = 0 +
-    ((controller.buttons & SCE_CTRL_LEFT) ? -0.01 : 0) +
-    ((controller.buttons & SCE_CTRL_RIGHT) ? 0.01 : 0);
-  float yforce = 0 +
-    ((controller.buttons & SCE_CTRL_UP) ? -0.01 : 0) +
-    ((controller.buttons & SCE_CTRL_DOWN) ? 0.01 : 0);
 
   pool->_forces[0][object] += xforce;
   pool->_forces[1][object] += yforce;
-
 }
 
 /* Check we've not been killed or picked up a powerup */
 void collide_player (verlet_pool_t * pool, uint16_t player, uint16_t morton) {
-  if (pool->_pos_now[0][player] < 32)        pool->_pos_now[0][player] = 32;
-  if (pool->_pos_now[0][player] > 960 + 32)  pool->_pos_now[0][player] = 960 + 32;
-  if (pool->_pos_now[1][player] < 32)        pool->_pos_now[1][player] = 32;
-  if (pool->_pos_now[1][player] > 540 + 32)  pool->_pos_now[1][player] = 540 + 32;
+  if (pool->_pos_now[0][player] < 0)        pool->_pos_now[0][player] = 0;
+  if (pool->_pos_now[0][player] > 960)  pool->_pos_now[0][player] = 960;
+  if (pool->_pos_now[1][player] < 0)        pool->_pos_now[1][player] = 0;
+  if (pool->_pos_now[1][player] > 540)  pool->_pos_now[1][player] = 540;
 }
-
 
 /* deal with player death */
 void die_player (verlet_pool_t * pool, uint16_t player) {

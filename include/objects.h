@@ -22,12 +22,14 @@ typedef struct {
 
 enum {
       PLAYER = 0,
-      PLAYER_BULLET, 
+      PLAYER_BULLET,
       MAX_OBJECT_TYPES
 };
 
 extern object_t _object_types[];
 extern uint32_t _object_state[];
+
+extern uint32_t _object_count;
 
 /* Overall object management stuff */
 void objects_init ();
@@ -41,7 +43,7 @@ void free_object (uint16_t object);
 void step_objects(verlet_pool_t * pool, float dt_over_dt, float dt_squared);
 void collide_objects(verlet_pool_t * pool);
 void draw_objects(verlet_pool_t * pool);
-  
+
 /* Generic lifetime functions */
 void object_init_generic(uint16_t type, verlet_pool_t * pool, uint16_t object, float x, float y);
 void object_step_generic(verlet_pool_t * pool, uint16_t object, float dt_over_dt, float dt_squared);
