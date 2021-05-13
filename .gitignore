@@ -7,8 +7,8 @@ build/*
 audio/*
 CMakeFiles
 CMakeCache.txt
-new_vita_game
-new_vita_game.self
-new_vita_game.velf
-new_vita_game.vpk
-new_vita_game.vpk_param.sfo
+#new_vita_game
+#new_vita_game.self
+#new_vita_game.velf
+#new_vita_game.vpk
+#new_vita_game.vpk_param.sfo
