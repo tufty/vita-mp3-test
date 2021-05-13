@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
     dt0 = dt1;
     t1 = sceKernelGetProcessTimeWide();
     dt1 = t1 - t0;
-    verlet_pool_integrate(&_pool, dt1 / dt0, (dt1 * dt1) / 1000000);
+    verlet_pool_integrate(&_pool, dt1 / dt0, (dt1 * ((dt1 + dt0) / 2)) / 10);
 
     step_objects(&_pool, dt1 / dt0, (dt1 * dt1) / 1000000);
 
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
     vita2d_pgf_draw_textf(font, 0, 16, 0xffffffff, 1.0, "# : %u", _object_count);
     vita2d_pgf_draw_textf(font, 0, 33, 0xffffffff, 1.0, "o : %#04x, t : %#04x, morton : %#04x", target, _pool._type[target], _pool._morton[target]);
-    vita2d_pgf_draw_textf(font, 0, 50, 0xffffffff, 1.0, "[%.f, %.f] [%.f, %.f]", _pool._pos_then[0][target], _pool._pos_then[1][target], _pool._pos_now[0][target], _pool._pos_now[1][target]);
+    vita2d_pgf_draw_textf(font, 0, 50, 0xffffffff, 1.0, "[%f, %f] [%f, %f]", _pool._pos_then[0][target], _pool._pos_then[1][target], _pool._pos_now[0][target], _pool._pos_now[1][target]);
     vita2d_pgf_draw_textf(font, 0, 67, 0xffffffff, 1.0, "Frame : %u, time : %u", frame, avg);
 
     vita2d_end_drawing();
