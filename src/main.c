@@ -53,9 +53,13 @@ int main(int argc, char *argv[]) {
     dt0 = dt1;
     t1 = sceKernelGetProcessTimeWide();
     dt1 = t1 - t0;
-    verlet_pool_integrate(&_pool, dt1 / dt0, (dt1 * ((dt1 + dt0) / 2)) / 10);
 
-    step_objects(&_pool, dt1 / dt0, (dt1 * dt1) / 1000000);
+float dt_over_dt = dt1 / dt0;
+float dt_squared = (dt1 * ((dt1 + dt0) / 2)) / 1000000;
+
+    verlet_pool_integrate(&_pool, dt_over_dt, dt_squared);
+
+    step_objects(&_pool, dt_over_dt, dt_squared);
 
     collide_objects(&_pool);
 
