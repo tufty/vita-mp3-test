@@ -7,6 +7,8 @@
 #include "verlet.h"
 
 extern SceCtrlData controller;
+extern uint32_t pressed_buttons;
+extern uint32_t released_buttons;
 extern uint64_t controller_ts;
 
 void init_player(verlet_pool_t * pool, uint16_t player, float x, float y);

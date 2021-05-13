@@ -6,7 +6,8 @@
 #include <psp2/ctrl.h>
 
 SceCtrlData controller;
-uint64_t controller_ts = 0;
+uint32_t pressed_buttons;
+uint32_t released_buttons;
 
 /* Initialise the player object */
 void init_player(verlet_pool_t * pool, uint16_t object, float x, float y) {
@@ -20,22 +21,19 @@ void step_player(verlet_pool_t * pool, uint16_t object, float dt_over_dt, float 
   float xforce = 0;
   float yforce = 0;
 
-  if (controller_ts != controller.timeStamp) {
-    /* Fire button */
-    if (controller.buttons & SCE_CTRL_CROSS) {
-      uint16_t bullet = allocate_object();
-      init_player_bullet(pool, bullet, pool->_pos_now[0][object], pool->_pos_now[1][object]);
-    }
-
-    /* Smart bomb */
-    if (controller.buttons & SCE_CTRL_RTRIGGER) {
-    }
-
-    xforce += ((controller.buttons & SCE_CTRL_LEFT) ? -0.01 : 0) +
-              ((controller.buttons & SCE_CTRL_RIGHT) ? 0.01 : 0);
-              yforce += ((controller.buttons & SCE_CTRL_UP) ? -0.01 : 0) +
-              ((controller.buttons & SCE_CTRL_DOWN) ? 0.01 : 0);
+  if (pressed_buttons & SCE_CTRL_CROSS) {
+    uint16_t bullet = allocate_object();
+    init_player_bullet(pool, bullet, pool->_pos_now[0][object], pool->_pos_now[1][object]);
   }
+
+  /* Smart bomb */
+  if (pressed_buttons & SCE_CTRL_RTRIGGER) {
+  }
+
+  xforce += ((controller.buttons & SCE_CTRL_LEFT) ? -0.01 : 0) +
+            ((controller.buttons & SCE_CTRL_RIGHT) ? 0.01 : 0);
+  yforce += ((controller.buttons & SCE_CTRL_UP) ? -0.01 : 0) +
+            ((controller.buttons & SCE_CTRL_DOWN) ? 0.01 : 0);
 
   pool->_forces[0][object] += xforce;
   pool->_forces[1][object] += yforce;

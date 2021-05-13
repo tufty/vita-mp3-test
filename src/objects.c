@@ -151,8 +151,8 @@ void object_init_generic(uint16_t type, verlet_pool_t * pool, uint16_t object, f
   pool->_type[object] = type;
   pool->_pos_now[0][object] = x;
   pool->_pos_now[1][object] = y;
-  pool->_pos_now[0][object] = x;
-  pool->_pos_now[1][object] = y;
+  pool->_pos_then[0][object] = x;
+  pool->_pos_then[1][object] = y;
   pool->_direction[0][object] = 0;
   pool->_direction[1][object] = 1;
   pool->_forces[0][object] = 0;

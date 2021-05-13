@@ -41,10 +41,9 @@ int main(int argc, char *argv[]) {
 
   uint32_t frame = 0;
   uint32_t rtot = 0, avg = 0;
-  uint32_t pressed_buttons = 0, released_buttons = 0;
 
   uint16_t player = allocate_object();
-  init_player(&_pool, player, 512, 48);
+  init_player(&_pool, player, 480.0, 270.0);
 
   while(1) {
 
@@ -76,9 +75,8 @@ int main(int argc, char *argv[]) {
 
     vita2d_pgf_draw_textf(font, 0, 16, 0xffffffff, 1.0, "# : %u", _object_count);
     vita2d_pgf_draw_textf(font, 0, 33, 0xffffffff, 1.0, "o : %#04x, t : %#04x, morton : %#04x", target, _pool._type[target], _pool._morton[target]);
-    vita2d_pgf_draw_textf(font, 0, 50, 0xffffffff, 1.0, "Frame : %u, time : %u", frame, avg);
-
-    vita2d_pgf_draw_textf(font, 0, 67, 0xffffffff, 1.0, "[%.f, %.f] [%.f, %.f]", _pool._pos_then[0][1], _pool._pos_then[1][1], _pool._pos_now[0][1], _pool._pos_now[1][1]);
+    vita2d_pgf_draw_textf(font, 0, 50, 0xffffffff, 1.0, "[%.f, %.f] [%.f, %.f]", _pool._pos_then[0][target], _pool._pos_then[1][target], _pool._pos_now[0][target], _pool._pos_now[1][target]);
+    vita2d_pgf_draw_textf(font, 0, 67, 0xffffffff, 1.0, "Frame : %u, time : %u", frame, avg);
 
     vita2d_end_drawing();
     vita2d_swap_buffers();
