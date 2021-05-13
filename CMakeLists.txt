@@ -31,8 +31,11 @@ set(VITA_VERSION  "01.00")
 
 ## Flags and includes for building
 # Note that we make sure not to overwrite previous flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -O0 -g -DFIXED_POINT=16")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -O0 -g -DFIXED_POINT=16")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -DFIXED_POINT=16 -O0 -g")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -DFIXED_POINT=16 -O0 -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -Wall -DFIXED_POINT=16 -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a+neon-fp16 -funsafe-math-optimizations --fast-math -std=c++11 -DFIXED_POINT=16 -O3")
+
 # Optional. You can specify more param.sfo flags this way.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
 

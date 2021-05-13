@@ -12,7 +12,7 @@ uint16_t _morton_index[VERLETS];
 void verlet_pool_init(verlet_pool_t * pool) {
 
   bzero(pool, sizeof(verlet_pool_t));
-  
+
   for (int i = 0; i < VERLETS; i++) {
     pool->_type[i] = 0xffff;
   }
@@ -21,14 +21,14 @@ void verlet_pool_init(verlet_pool_t * pool) {
 static const uint8_t morton5[] = { 0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15,
 				   0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55 };
 
-static const uint16_t x21212121[] = { 2, 1, 2, 1, 2, 1, 2, 1 }; 
+static const uint16_t x21212121[] = { 2, 1, 2, 1, 2, 1, 2, 1 };
 
 int morton_comp(const void * e1, const void* e2);
 
 void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squared) {
   /* Vector versions of the arguments */
   float32x4_t dtdt, dt2;
-  
+
   /* Constants we'll be wanting */
   float32x4_t vzero, vone, v1023;
 
@@ -36,7 +36,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     uint8x8x2_t vmorton5x2;
     uint8x16_t vmorton5;
   } vmorton;
-  
+
   uint16x8_t vbit4, vbit45, v000f, v21212121, tmp16_0, tmp16_1, raw_morton, morton_side, m01, m23;
   uint16x4_t tmp16_3, vffff, vf000, morton;
   uint32x4_t tmp32_0, tmp32_1;
@@ -44,7 +44,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
 
   int16x8_t vones16, vminusones16, offsets, vsigned;
 
-  
+
   union {
     uint8x16_t x16;
     uint8x8x2_t x8x2;
@@ -62,7 +62,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
   /* set up our loop invariants */
   dtdt             = vdupq_n_f32(dt_over_dt);
   dt2              = vdupq_n_f32(dt_squared);
-  
+
   vzero            = vdupq_n_f32(0.0);
   vone             = vdupq_n_f32(1.0);
   v1023            = vdupq_n_f32(1023.0);
@@ -78,8 +78,8 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
 
   vones16          = vdupq_n_s16(1);
   vminusones16     = vdupq_n_s16(-1);
- 
- 
+
+
   /* Loop through, 4-wise */
   for (int i = 0; i < (VERLETS / 4); i++) {
     /* Load values */
@@ -89,9 +89,9 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     pos_now[1]    = vld1q_f32(&(pool->_pos_now[1][i << 2]));
     pos_then[1]   = vld1q_f32(&(pool->_pos_then[1][i << 2]));
     forces[1]     = vld1q_f32(&(pool->_forces[1][i << 2]));
-    
+
     type          = vld1_u16(&(pool->_type[i << 2]));
-    
+
     one_over_mass = vld1q_f32(&(pool->_one_over_mass[i << 2]));
 
     /* Start calculating */
@@ -149,11 +149,11 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
 
     /* calculate the morton index for the position */
     /* This involves going from 32 bit to 16, we can thus do quadword 16x8 */
-    
+
     /* So, let's go.  Convert to integer.  Can't avoid that. */
     tmp32_0 = vcvtq_u32_f32(pos_now[0]);
     tmp32_1 = vcvtq_u32_f32(pos_now[1]);
-    
+
     /* Reinterpret these as quadword 16 bit values, should be zero cost. */
     tmp16_0 = vreinterpretq_u16_u32(tmp32_0);
     tmp16_1 = vreinterpretq_u16_u32(tmp32_1);
@@ -165,7 +165,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
     /* We can now do the math we need. */
     /* Save which "side" we're on.  If (n % 32) > 15, bit 4 will be set */
     morton_side = vtstq_u16(tmp16_2.val[0], vbit4);
-		
+
     /* Shift the whole lot right by 5, thus dividing by 32 */
     raw_morton = vshrq_n_u16(tmp16_2.val[0], 5);
 
@@ -224,7 +224,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
 
     /* Set high byte for objects with type of 0xffff */
     tmp16_3 = vceq_u16(type, vffff);
-    tmp16_3 = vand_u16(tmp16_3, vf000);    
+    tmp16_3 = vand_u16(tmp16_3, vf000);
     morton = vadd_u16(morton, tmp16_3);
 
     /* Store result */
@@ -243,7 +243,7 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
   /* And create an index of morton code to entry in object index */
   int last_m = -1;
   for (int i = 0; i < VERLETS; i++) { /* Index into _object_index */
-    
+
     uint16_t o = pool->_object_index[i];    /* Index to the object in _pool */
     uint16_t m = pool->_morton[o];    /* Morton code for the object */
 
@@ -253,14 +253,14 @@ void verlet_pool_integrate (verlet_pool_t * pool, float dt_over_dt, float dt_squ
 
     if (last_m < m) {                 /* We have a new morton code */
       for (int j = last_m + 1; j <= m; j++) {
-	pool->_morton_index[j] = i; 
+	pool->_morton_index[j] = i;
       }
       last_m = m;
     }
   }
   if (last_m != 0x3ff) {
       for (int j = last_m + 1; j <= 0x3ff; j++) {
-	pool->_morton_index[j] = 0x3ff; 
+	pool->_morton_index[j] = 0x3ff;
       }
   }
 
