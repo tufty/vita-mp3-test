@@ -176,6 +176,33 @@ src/bgm.c.s:
 	$(MAKE) -f CMakeFiles/new_vita_game.dir/build.make CMakeFiles/new_vita_game.dir/src/bgm.c.s
 .PHONY : src/bgm.c.s
 
+src/controls.obj: src/controls.c.obj
+
+.PHONY : src/controls.obj
+
+# target to build an object file
+src/controls.c.obj:
+	$(MAKE) -f CMakeFiles/new_vita_game.dir/build.make CMakeFiles/new_vita_game.dir/src/controls.c.obj
+.PHONY : src/controls.c.obj
+
+src/controls.i: src/controls.c.i
+
+.PHONY : src/controls.i
+
+# target to preprocess a source file
+src/controls.c.i:
+	$(MAKE) -f CMakeFiles/new_vita_game.dir/build.make CMakeFiles/new_vita_game.dir/src/controls.c.i
+.PHONY : src/controls.c.i
+
+src/controls.s: src/controls.c.s
+
+.PHONY : src/controls.s
+
+# target to generate assembly for a file
+src/controls.c.s:
+	$(MAKE) -f CMakeFiles/new_vita_game.dir/build.make CMakeFiles/new_vita_game.dir/src/controls.c.s
+.PHONY : src/controls.c.s
+
 src/kiss_fft.obj: src/kiss_fft.c.obj
 
 .PHONY : src/kiss_fft.obj
@@ -379,6 +406,9 @@ help:
 	@echo "... src/bgm.obj"
 	@echo "... src/bgm.i"
 	@echo "... src/bgm.s"
+	@echo "... src/controls.obj"
+	@echo "... src/controls.i"
+	@echo "... src/controls.s"
 	@echo "... src/kiss_fft.obj"
 	@echo "... src/kiss_fft.i"
 	@echo "... src/kiss_fft.s"

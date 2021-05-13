@@ -157,7 +157,7 @@ void object_init_generic(uint16_t type, verlet_pool_t * pool, uint16_t object, f
   pool->_direction[1][object] = 1;
   pool->_forces[0][object] = 0;
   pool->_forces[1][object] = 0;
-  pool->_morton[object] = 0xf000;
+  pool->_morton[object] = 0x0000;
 }
 
 /* Generic object step function, do nothing */

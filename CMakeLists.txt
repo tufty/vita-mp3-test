@@ -52,6 +52,7 @@ link_directories(
 # Add all the files needed to compile here
 add_executable(${PROJECT_NAME}
   src/main.c
+  src/controls.c
   src/bgm.c
   src/kiss_fft.c
   src/kiss_fftr.c
